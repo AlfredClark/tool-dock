@@ -12,11 +12,12 @@
   fill="currentColor"
   aria-hidden="true"
   class={cn("size-10", className)}
-  ><g transform="translate(40 0) skewX(-14)">
+>
+  <g transform="translate(40 0) skewX(-14)">
     <polygon points="221.2,102.3 290.8,70.4 290.8,441.6 221.2,441.6" />
     <rect x="58.8" y="128.4" width="232" height="63.8" />
     <rect x="290.8" y="174.8" width="174" height="63.8" />
     <rect x="401" y="174.8" width="63.8" height="243.6" />
     <rect x="290.8" y="354.6" width="174" height="63.8" />
-  </g></svg
->
+  </g>
+</svg>

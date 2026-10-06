@@ -3,11 +3,13 @@
 import InfoIcon from "@lucide/svelte/icons/info";
 import HouseIcon from "@lucide/svelte/icons/house";
 import SettingsIcon from "@lucide/svelte/icons/settings";
+import ToolboxIcon from "@lucide/svelte/icons/toolbox";
 import { m } from "$libs/i18n/paraglide/messages";
 
 /** 导航标签清单，数组顺序即渲染顺序；`as const` 保留路径字面量类型，注册错路由会在编译期报错 */
 export const NAV_TABS = [
   { path: "/", label: m.nav_home, icon: HouseIcon },
+  { path: "/tools", label: m.nav_tools, icon: ToolboxIcon },
   { path: "/settings", label: m.nav_settings, icon: SettingsIcon },
   { path: "/about", label: m.nav_about, icon: InfoIcon },
 ] as const;

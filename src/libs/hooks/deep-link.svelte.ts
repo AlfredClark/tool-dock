@@ -10,6 +10,7 @@ import { getCurrent, onOpenUrl } from "@tauri-apps/plugin-deep-link";
 import { SvelteMap } from "svelte/reactivity";
 import { reportCommandFailure } from "$libs/commands/cores";
 import { m } from "$libs/i18n/paraglide/messages";
+import { resolveTool, type ToolPath } from "$libs/tools/registry";
 import { toast } from "$libs/utils/toast";
 
 /** 应用协议 scheme，与打包配置与后端提取前缀保持一致 */
@@ -33,23 +34,29 @@ export function isDeepLink(url: string): boolean {
 }
 
 /** 深链映射到应用内路由；未知路径回落 `null`（停留并提示） */
-export function routeForUrl(url: string): "/" | "/about" | "/settings" | null {
+export function routeForUrl(
+  url: string,
+): "/" | "/about" | "/settings" | "/tools" | ToolPath | null {
   if (!isDeepLink(url)) {
     return null;
   }
-  const path = url.slice(DEEP_LINK_SCHEME.length + 3).split(/[?#]/)[0];
+  const raw = url.slice(DEEP_LINK_SCHEME.length + 3).split(/[?#]/)[0];
+  // 前导斜杠数量不固定（`tool-dock://about` 与 `tool-dock:///about` 同义），先归一化
+  const path = raw.startsWith("/") ? raw.slice(1) : raw;
   switch (path) {
     case "":
-    case "/":
       return "/";
     case "about":
-    case "/about":
       return "/about";
     case "settings":
-    case "/settings":
       return "/settings";
-    default:
-      return null;
+    case "tools":
+      return "/tools";
+    default: {
+      // 工具详情页：仅放行注册表已登记的路径，未知工具停留并提示
+      const tool = resolveTool(`/${path}`);
+      return tool?.path ?? null;
+    }
   }
 }
 

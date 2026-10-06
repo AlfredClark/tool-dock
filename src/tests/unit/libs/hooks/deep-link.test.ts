@@ -34,8 +34,17 @@ describe("routeForUrl", () => {
     expect(routeForUrl("tool-dock:///")).toBe("/");
   });
 
+  it("映射工具列表与已登记的工具详情页", () => {
+    expect(routeForUrl("tool-dock://tools")).toBe("/tools");
+    expect(routeForUrl("tool-dock:///tools")).toBe("/tools");
+    expect(routeForUrl("tool-dock://text/editor")).toBe("/text/editor");
+    expect(routeForUrl("tool-dock:///text/editor?from=home")).toBe("/text/editor");
+  });
+
   it("未知路径与非本协议回落空", () => {
     expect(routeForUrl("tool-dock://unknown")).toBeNull();
+    expect(routeForUrl("tool-dock://tools/unknown")).toBeNull();
+    expect(routeForUrl("tool-dock://text/demo")).toBeNull();
     expect(routeForUrl("https://example.com")).toBeNull();
   });
 });

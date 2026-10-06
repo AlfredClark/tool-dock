@@ -17,6 +17,7 @@
   4. 前后端崩溃兜底（前端 `ErrorBoundary` + 后端 panic 钩子写 `%TEMP%/tool-dock_crash.log`）
   5. 完整设置页（通用分组经 `config.json` 落盘 + 外观分组纯前端）
   6. 关于页（应用 / 项目 / 平台分组 + 更新面板）与桌面外壳（无边框窗口 / 托盘 / 单实例 + `tool-dock://` 深链 / 更新器）
+  7. 首页工具搜索 + 工具列表页（按分类网格渲染）+ 独立工具路由（`(tools)` 分组自绘标题栏，三者同源于工具注册表 `libs/tools/registry.ts`）
 - **用户角色：** Tauri + Svelte 技术栈的桌面应用开发者
 
 ---
@@ -62,16 +63,21 @@ tool-dock/
 │   │   ├── +layout.ts              # ssr = false（SPA 模式）；语言对齐在 +layout.svelte 挂载后后台完成，不经 load()（Tauri invoke 走 window.fetch，load 内调用触发 SvelteKit 追踪警告）
 │   │   ├── (main)/                 # 分组路由（括号不进 URL）：常规页面分组，独享布局容器
 │   │   │   ├── +layout.svelte      # 分组布局：LayoutContainer 包裹，特殊页另起分组即可绕开布局
-│   │   │   ├── +page.svelte        # 占位首页：布局骨架验证起点，业务在此开发
+│   │   │   ├── +page.svelte        # 首页：应用图标 + 工具搜索（注册表过滤，选中跳转），下方留白供后续功能
 │   │   │   ├── about/              # 导航标签示例页（应用 / 项目 / 平台分组 + 更新面板）
-│   │   │   └── settings/           # 完整设置页（通用 + 外观两分组）
+│   │   │   ├── settings/           # 完整设置页（通用 + 外观两分组）
+│   │   │   └── tools/              # 工具列表页（按分类网格渲染，点击进独立工具路由）
+│   │   ├── (tools)/                # 工具详情分组（括号不进 URL）：绕开主布局容器，自绘标题栏
+│   │   │   ├── +layout.svelte      # 独立布局：左返回（`goto("/tools")`，不用 history.back）+ 中工具名（查注册表）+ 右窗口控制（复用 parts/window-buttons.svelte）
+│   │   │   └── text/editor/        # 文本编辑工具路由（URL 即 /text/editor），内部组件在 components/tools/text/editor/
 │   │   └── layout.css              # Tailwind v4 入口与 shadcn-svelte 主题令牌（含 .dark 暗色变体与 --app-font-* 外观变量）
 │   │   └── themes.css              # 配色主题令牌（鲜艳系 7 色 + 暗色美学 3 色的浅色 + :root.dark 暗色块，neutral 回落 layout.css）
 │   ├── components/
 │   │   ├── common/                 # 手写共享组件（error-boundary.svelte 全局渲染兜底，card-section/row.svelte 通用卡片分组与行，confirm-dialog.svelte 通用确认弹窗）
 │   │   ├── layout/                 # 布局子系统：layout-container.svelte 容器 + tabs（标题栏/标签栏/内容/底边）与 sidebar（侧边栏 + 标题栏/内容/底边）实现，新增布局需在 libs/hooks/appearance.svelte.ts 中映射
-│   │   │   └── parts/              # 布局配套部件（title-bar / nav-tabs-bar / side-nav-bar / copyright）
-│   │   ├── widget/                 # 手写页面小组件（settings/：设置页通用/外观分组与字体选择器；about/：关于页应用/项目/平台分组与更新面板）
+│   │   │   └── parts/              # 布局配套部件（title-bar / window-buttons / nav-tabs-bar / side-nav-bar / copyright）
+│   │   ├── widget/                 # 手写页面小组件（settings/：设置页通用/外观分组与字体选择器；about/：关于页应用/项目/平台分组与更新面板；home/：首页工具搜索；tools/：工具网格与占位）
+│   │   ├── tools/                    # 工具内部组件：按 `<分类>/<工具名>` 分目录，与工具路由一一对应（如 routes/(tools)/text/editor 的内部组件放 tools/text/editor/，路由页只做组装）
 │   │   └── shadcn-svelte/          # CLI 生成的 UI 组件（nova / neutral / lucide），新增走 CLI 添加，勿手动重组
 │   ├── tests/                      # 前端测试集中目录，按源路径镜像：unit/ 纯逻辑（node）+ component/ 组件（jsdom）
 │   └── libs/
@@ -79,6 +85,7 @@ tool-dock/
 │       ├── http/                   # 网络层：client.ts 通用请求封装，错误统一 HttpError
 │       ├── i18n/                   # Paraglide：messages/ 文案、project.inlang/ 配置、paraglide/ 生成物
 │       ├── navigation/             # 导航等应用级注册表（nav-tabs.ts：路径 / 图标 / 顺序，顶部标签栏与侧边栏导航同源）
+│       ├── tools/                    # 工具注册表（registry.ts：路径 / 分类 / 文案 / 图标，首页搜索 + 工具网格 + 工具标题栏 + 深链四处同源）
 │       ├── utils/                  # 前端通用工具（shadcn-svelte.ts 的 cn()、window-controls.ts、toast.ts、opener.ts）
 │       └── hooks/                  # 前端共享状态（统一经 $hooks 引用），如 appearance.svelte.ts（布局注册表 + 字体偏好）、config.svelte.ts（后端配置内存态）、updater.svelte.ts（更新状态）、is-mobile.svelte.ts（响应式断点）、deep-link.svelte.ts（三路深链入口）
 ├── src-tauri/                      # 后端：Rust（edition 2024）
@@ -111,6 +118,7 @@ tool-dock/
 - 后端 `commands/` 只做薄封装（参数与结果转换 + 注册），业务逻辑必须放入 `features/`，跨层共享能力放入 `cores/`。
 - `libs/utils/` 只放不含业务 / 应用知识的通用工具（`cn()` / `toast` / `window-controls`）；注册表类（路径、图标、顺序等应用知识）放 `libs/<领域>/`，如导航注册表在 `libs/navigation/`。后端通用能力一律进 `cores/`，不另设 `utils/`。
 - `bindings.ts` 为生成物，禁止手动编辑；`paraglide/` 生成物禁止编辑、禁止从外部导入其内部文件。
+- 工具内部组件一律放 `src/components/tools/<分类>/<工具名>/`，与 `routes/(tools)/<分类>/<工具名>/` 路由一一对应，路由页只做组装不写业务；跨工具复用的展示组件才允许上浮到 `components/widget/tools/`。
 - 路径别名（`$assets`、`$components`、`$hooks`、`$libs`）唯一来源是 `svelte.config.ts` 的 `kit.alias`，不写入 `vite.config.ts` 。
 
 ---
@@ -311,6 +319,7 @@ CI（`.github/workflows/ci.yml`）在 `main` 分支上按变更路径触发：
    - `.prettierignore` ↔ `.gitignore` 中的构建产物（Prettier 不读 `.gitignore`）
    - CI backend 的 `changes` 路径过滤器 ↔ 新增的后端配置文件
 5. **构建与忽略：** 构建产物（`target/`、`build/`、`.svelte-kit/`、`src-tauri/gen/`、`node_modules/`、`src/libs/i18n/paraglide/`）均已忽略；`bindings.ts` 虽是生成物但**需要提交**；`Cargo.lock` 需要提交；`static/icon.png` 为图标源文件（`pnpm tauri:icon` 生成各平台图标）。Vite 固定端口 `1420`，忽略监听 `src-tauri/**`，`clearScreen: false` 以保留 Rust 日志。主窗口初始 `visible: false`（防恢复闪烁），由 `cores/config.rs` 的 `setup` 按记住窗口配置恢复后统一 `show`，任何提前返回前必须显示，否则永久黑屏；仅恢复 `main` 窗口。
+6. **工具新增流程：** `messages/` 加 `tool_<id>_name/description`（分类新增同步加 `tool_category_*`）→ `pnpm i18n:compile` → `libs/tools/registry.ts` 加条目（`id` / `path` / `category` / 文案函数 / 图标；新分类先扩 `TOOL_CATEGORIES` 元组）→ `routes/(tools)/<分类>/<工具名>/+page.svelte` 建路由（只做组装，内部组件放 `components/tools/<分类>/<工具名>/`）→ 标题栏经 `resolveTool` 自动取名字，无需改 `(tools)/+layout.svelte` → 深链详情分支按注册表校验放行（列表页 `/tools` 已有映射，新工具路径自动生效，仅需在前后端深链单测补用例）→ 前后端单测（注册表 + 网格 + 布局）→ 联调。禁止在首页 / 网格 / 标题栏 / 深链四处任一处硬编码工具信息。
 
 ---
 
