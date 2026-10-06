@@ -12,8 +12,8 @@ import { reportCommandFailure } from "$libs/commands/cores";
 import { m } from "$libs/i18n/paraglide/messages";
 import { toast } from "$libs/utils/toast";
 
-/** 演示用协议 scheme，基于模板开发时按需自定义 */
-export const DEEP_LINK_SCHEME = "tdt";
+/** 应用协议 scheme，与打包配置与后端提取前缀保持一致 */
+export const DEEP_LINK_SCHEME = "tool-dock";
 
 /** 次实例转发的 Rust 事件名，与 `plugins/single_instance.rs` 同名 */
 export const SECOND_INSTANCE_EVENT = "app:open-urls";

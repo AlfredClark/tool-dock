@@ -13,42 +13,6 @@ export const commands = {
 	 *  界面语言亦经此切换——运行时 `rust_i18n` 由 `config::apply_runtime_effects` 统一同步。
 	 */
 	updateConfig: (patch: ConfigPatch) => typedError<Config_Serialize, CommandError>(__TAURI_INVOKE("update_config", { patch })),
-	/**
-	 *  演示命令：把入参转交给 `features::demo::greet` 处理。
-	 * 
-	 *  `anyhow` 错误经 `From` 自动转为 `CommandError::Internal`。
-	 */
-	greet: (name: string) => typedError<string, CommandError>(__TAURI_INVOKE("greet", { name })),
-	/**  解析三处应用目录供演示页展示与复制 */
-	demoAppPaths: () => typedError<DemoAppPaths, CommandError>(__TAURI_INVOKE("demo_app_paths")),
-	/**  写演示沙盒文件，返回绝对路径 */
-	demoWriteFile: (filename: string, contents: string) => typedError<string, CommandError>(__TAURI_INVOKE("demo_write_file", { filename, contents })),
-	/**  读演示沙盒文件 */
-	demoReadFile: (filename: string) => typedError<string, CommandError>(__TAURI_INVOKE("demo_read_file", { filename })),
-	/**  系统选文件框；用户取消返回 `None` */
-	demoPickFile: () => typedError<string | null, CommandError>(__TAURI_INVOKE("demo_pick_file")),
-	/**  系统选目录框；用户取消返回 `None`（移动端无目录选择，报错走 `.failed()`） */
-	demoPickFolder: () => typedError<string | null, CommandError>(__TAURI_INVOKE("demo_pick_folder")),
-	/**  系统存文件框；只取路径不写盘，用户取消返回 `None` */
-	demoSaveFile: () => typedError<string | null, CommandError>(__TAURI_INVOKE("demo_save_file")),
-	/**  写剪贴板纯文本 */
-	demoClipboardWrite: (text: string) => typedError<null, CommandError>(__TAURI_INVOKE("demo_clipboard_write", { text })),
-	/**  读剪贴板纯文本；空剪贴板按空串返回 */
-	demoClipboardRead: () => typedError<string, CommandError>(__TAURI_INVOKE("demo_clipboard_read")),
-	/**  发送一条本地通知 */
-	demoNotify: (title: string, body: string) => typedError<null, CommandError>(__TAURI_INVOKE("demo_notify", { title, body })),
-	/**  演示快捷键固定键（`features::demo::DEMO_SHORTCUT`），前端展示用，不开放写入 */
-	demoShortcutKey: () => typedError<string, CommandError>(__TAURI_INVOKE("demo_shortcut_key")),
-	/**  注册演示快捷键；幂等，已注册直接成功（移动端报错走 `.failed()`） */
-	demoShortcutRegister: () => typedError<boolean, CommandError>(__TAURI_INVOKE("demo_shortcut_register")),
-	/**  查询演示快捷键是否已注册（移动端恒 `false`） */
-	demoShortcutIsRegistered: () => typedError<boolean, CommandError>(__TAURI_INVOKE("demo_shortcut_is_registered")),
-	/**  注销演示快捷键；幂等（移动端报错走 `.failed()`） */
-	demoShortcutUnregister: () => typedError<null, CommandError>(__TAURI_INVOKE("demo_shortcut_unregister")),
-	/**  鉴别拖放批次：只取元信息不读内容，任一项失败整批失败 */
-	demoInspectDrop: (paths: string[]) => typedError<DropFileInfo[], CommandError>(__TAURI_INVOKE("demo_inspect_drop", { paths })),
-	/**  存拖放文件到沙盒：仅常规文件可拷，返回沙盒绝对路径列表 */
-	demoImportDrop: (paths: string[]) => typedError<string[], CommandError>(__TAURI_INVOKE("demo_import_drop", { paths })),
 	/**  采集运行平台信息；单项缺失时回落 `"unknown"`，绝不抛错 */
 	getSystemInfo: () => typedError<SystemInfo, CommandError>(__TAURI_INVOKE("get_system_info")),
 	/**  真退出应用进程；调用后进程结束，结果体永不可达（按 `CommandResult<()>` 保持命令类型统一） */
@@ -185,29 +149,6 @@ export type Config_Serialize = {
 	tray_enabled: boolean,
 	/**  关闭窗口行为：缺失、类型不符或无法识别时回落弹窗提示，绝不让整包解析失败 */
 	close_behavior: CloseBehavior,
-};
-
-/**  演示页展示的应用目录：只含前端展示所需字段，`PathBuf` 句柄不出命令边界 */
-export type DemoAppPaths = {
-	/**  应用数据目录（演示沙盒 `demo/` 即落于此下） */
-	app_data: string,
-	/**  应用缓存目录 */
-	app_cache: string,
-	/**  系统临时目录 */
-	temp: string,
-};
-
-/**
- *  拖放文件元信息：只取 `symlink_metadata`（不跟随符号链接），不读内容；
- *  目录仅展示不导入，符号链接直接拒绝（目标可能指向沙盒之外）
- */
-export type DropFileInfo = {
-	/**  末段文件名（展示用，不含目录部分） */
-	name: string,
-	/**  文件字节数；目录按 `0` 返回（`f64`：`specta` 禁止导出 `u64`，展示精度足够） */
-	size: number | null,
-	/**  是否为目录 */
-	is_dir: boolean,
 };
 
 /**  应用支持的语言 */

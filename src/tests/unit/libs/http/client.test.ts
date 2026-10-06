@@ -20,7 +20,7 @@ describe("httpFetch", () => {
   it("2xx 直接返回响应", async () => {
     vi.mocked(fetchMock).mockResolvedValue(okResponse());
 
-    const response = await httpFetch("https://timeapi.io/api/time/current/zone?timeZone=UTC");
+    const response = await httpFetch("https://example.com/api/time/current/zone?timeZone=UTC");
 
     expect(response.ok).toBe(true);
     expect(fetchMock).toHaveBeenCalledOnce();
@@ -29,7 +29,7 @@ describe("httpFetch", () => {
   it("非 2xx 抛 http 错误且不重试", async () => {
     vi.mocked(fetchMock).mockResolvedValue({ ok: false, status: 404 } as Response);
 
-    const error = await httpFetch("https://timeapi.io/missing").catch((error: unknown) => error);
+    const error = await httpFetch("https://example.com/missing").catch((error: unknown) => error);
 
     expect(error).toBeInstanceOf(HttpError);
     expect((error as HttpError).kind).toBe("http");
@@ -40,7 +40,7 @@ describe("httpFetch", () => {
   it("网络错误默认重试一次后抛出", async () => {
     vi.mocked(fetchMock).mockRejectedValue(new Error("connection refused"));
 
-    const error = await httpFetch("https://timeapi.io/x").catch((error: unknown) => error);
+    const error = await httpFetch("https://example.com/x").catch((error: unknown) => error);
 
     expect(error).toBeInstanceOf(HttpError);
     expect((error as HttpError).kind).toBe("network");
@@ -50,7 +50,7 @@ describe("httpFetch", () => {
   it("retries 为 0 时失败即抛", async () => {
     vi.mocked(fetchMock).mockRejectedValue(new Error("connection refused"));
 
-    await expect(httpFetch("https://timeapi.io/x", { retries: 0 })).rejects.toBeInstanceOf(
+    await expect(httpFetch("https://example.com/x", { retries: 0 })).rejects.toBeInstanceOf(
       HttpError,
     );
     expect(fetchMock).toHaveBeenCalledOnce();
@@ -71,7 +71,7 @@ describe("httpFetch", () => {
         }),
     );
 
-    const error = await httpFetch("https://timeapi.io/x", { timeoutMs: 20, retries: 0 }).catch(
+    const error = await httpFetch("https://example.com/x", { timeoutMs: 20, retries: 0 }).catch(
       (error: unknown) => error,
     );
 
@@ -82,7 +82,7 @@ describe("httpFetch", () => {
   it("非桌面环境 import 失败归一为网络错误", async () => {
     vi.mocked(fetchMock).mockRejectedValue(new Error("no runtime"));
 
-    const error = await httpFetch("https://timeapi.io/x", { retries: 0 }).catch(
+    const error = await httpFetch("https://example.com/x", { retries: 0 }).catch(
       (error: unknown) => error,
     );
 

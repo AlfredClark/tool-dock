@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "tauri-desktop-template",
-  "version": "0.3.0",
-  "identifier": "io.github.alfredclark.tauri-desktop-template",
+  "productName": "ToolDock",
+  "version": "0.1.0",
+  "identifier": "io.github.alfredclark.tool-dock",
   "build": {
     "beforeDevCommand": "pnpm dev",
     "devUrl": "http://localhost:1420",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "Tauri Desktop Template",
+        "title": "ToolDock",
         "width": 1280,
         "height": 800,
         "minWidth": 1280,
@@ -25,7 +25,7 @@
     "security": {
       "devCsp": {
         "default-src": "'self' http://localhost:1420",
-        "connect-src": "'self' ipc: http://ipc.localhost https://ipc.localhost tauri: http://localhost:1420 ws://localhost:1420 ws://localhost:1421 https://timeapi.io",
+        "connect-src": "'self' ipc: http://ipc.localhost https://ipc.localhost tauri: http://localhost:1420 ws://localhost:1420 ws://localhost:1421",
         "script-src": "'self' 'unsafe-inline' 'unsafe-eval' http://localhost:1420",
         "style-src": "'self' 'unsafe-inline' http://localhost:1420",
         "img-src": "'self' asset: https://asset.localhost data: http://localhost:1420",
@@ -34,7 +34,7 @@
       },
       "csp": {
         "default-src": "'self'",
-        "connect-src": "'self' ipc: http://ipc.localhost https://ipc.localhost tauri: https://timeapi.io",
+        "connect-src": "'self' ipc: http://ipc.localhost https://ipc.localhost tauri:",
         "script-src": "'self' 'unsafe-inline'",
         "style-src": "'self' 'unsafe-inline'",
         "img-src": "'self' asset: https://asset.localhost data:",
@@ -72,13 +72,13 @@
   "plugins": {
     "deep-link": {
       "desktop": {
-        "schemes": ["tdt"]
+        "schemes": ["tool-dock"]
       }
     },
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEFENUQ2RjA3NzlBQ0Q4MTIKUldRUzJLeDVCMjlkcldOQVI3Rm0rWjVBZ2ROWXZJdnhIOWl6TUtZQWsvL2VzaFpjendLOWtycS8K",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IENENzQ0QzhERjc0MENBREMKUldUY3lrRDNqVXgwelZUSGxidmtKZW1vNE1SVnlqWnduTGVnNXQ4cXV1blVRRk9PVkp5MU9TREgK",
       "endpoints": [
-        "https://github.com/AlfredClark/tauri-desktop-template/releases/latest/download/latest.json"
+        "https://github.com/AlfredClark/tool-dock/releases/latest/download/latest.json"
       ],
       "windows": {
         "installMode": "passive"

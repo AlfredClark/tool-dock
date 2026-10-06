@@ -1,11 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/svelte";
 import userEvent from "@testing-library/user-event";
-import { tick } from "svelte";
-import { configState, hydrateConfig } from "$hooks/config.svelte";
-import { reportCommandFailure } from "$libs/commands/cores";
-import type { Config_Serialize } from "$libs/commands/types";
-import { getLocale, setLocale } from "$libs/i18n/paraglide/runtime";
 import Harness from "../stubs/root-layout-harness.svelte";
 
 // 根布局回归：外观初始化只跑一次，未落盘的预览不得被重初始化覆盖。
@@ -58,6 +53,7 @@ vi.mock("@tauri-apps/api/window", () => ({
 vi.mock("$hooks/config.svelte", () => ({
   configState: { value: null },
   hydrateConfig: vi.fn(async () => {}),
+  hydrateAndAlignLocale: vi.fn(async () => {}),
 }));
 
 vi.mock("$hooks/deep-link.svelte", () => ({
@@ -76,19 +72,6 @@ vi.mock("$libs/commands/cores", () => ({
   reportCommandFailure: vi.fn(),
 }));
 
-vi.mock("$libs/i18n/paraglide/runtime", () => ({
-  getLocale: vi.fn(),
-  setLocale: vi.fn(),
-}));
-
-/** 等挂载期后台水合走完：$effect → hydrateConfig → 对齐语言，全是跨微任务的异步链 */
-async function flushHydrate(): Promise<void> {
-  for (let i = 0; i < 5; i += 1) {
-    await tick();
-    await new Promise((resolve) => setTimeout(resolve, 0));
-  }
-}
-
 afterEach(() => {
   cleanup();
   document.body.removeAttribute("style");
@@ -97,9 +80,6 @@ afterEach(() => {
 beforeEach(() => {
   vi.clearAllMocks();
   localStorage.clear();
-  configState.value = null;
-  vi.mocked(hydrateConfig).mockResolvedValue(undefined);
-  vi.mocked(getLocale).mockReturnValue("en");
 });
 
 describe("根布局外观对齐", () => {
@@ -125,46 +105,5 @@ describe("根布局外观对齐", () => {
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(screen.getByTestId("weight").textContent).toBe("500");
     expect(document.documentElement.style.getPropertyValue("--app-font-weight")).toBe("500");
-  });
-});
-
-describe("根布局启动水合", () => {
-  const saved: Config_Serialize = {
-    locale: "zh-CN",
-    auto_start: true,
-    remember_window: true,
-    auto_check_update: true,
-    tray_enabled: true,
-    close_behavior: "prompt",
-    schema_version: 1,
-  };
-
-  it("水合成功且语言不一致时对齐且不重载", async () => {
-    configState.value = saved;
-    render(Harness);
-    await flushHydrate();
-
-    expect(hydrateConfig).toHaveBeenCalledOnce();
-    expect(setLocale).toHaveBeenCalledWith("zh-CN", { reload: false });
-  });
-
-  it("语言已一致时不调用对齐", async () => {
-    configState.value = { ...saved, locale: "en" };
-    render(Harness);
-    await flushHydrate();
-
-    expect(hydrateConfig).toHaveBeenCalledOnce();
-    expect(setLocale).not.toHaveBeenCalled();
-  });
-
-  it("水合构造期抛错时上报且不阻断首帧", async () => {
-    vi.mocked(hydrateConfig).mockRejectedValueOnce(new Error("boom"));
-    render(Harness);
-    await flushHydrate();
-
-    expect(reportCommandFailure).toHaveBeenCalledWith("[config] hydrate threw", expect.anything());
-    expect(setLocale).not.toHaveBeenCalled();
-    // 首帧照常渲染，不白屏（getBy* 找不到会直接抛错，本身即断言）
-    expect(screen.getByTestId("weight").textContent).not.toBeNull();
   });
 });

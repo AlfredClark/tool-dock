@@ -8,9 +8,9 @@ import type { AnyFn, AnyResult, CommandFailure, FnResult, OkData, WrappedFn } fr
 /// 按 `status` 分支后执行，或确保回调自身不抛错。
 
 // 取值（失败或数据为 null/undefined 时回落默认值，默认值可省略）：
-//   const name = await commands.greet(input).value("陌生人");
+//   const config = await commands.getConfig().value(undefined);
 // 需要自己按成败分支：
-//   const result = await commands.greet(input).result();
+//   const result = await commands.getConfig().result();
 // 事务（回调可为 async；await 整条链会等回调执行完）：
 //   await commands.updateConfig({ locale: "zh-CN" }).success(applyLocale).failed(showError);
 export class EnhancedCommand<R extends AnyResult> implements PromiseLike<R> {

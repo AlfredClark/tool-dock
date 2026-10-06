@@ -12,6 +12,7 @@
   let Layout = $state<LayoutComponent | undefined>(undefined);
   let shownName = $state<LayoutName>("tabs");
 
+  // 只写不读：init 内仅读 localStorage（非响应式），该 effect 仅首帧跑一次，无需 untrack
   $effect.pre(() => {
     initLayout();
   });

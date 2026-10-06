@@ -5,41 +5,12 @@
   "platforms": ["linux", "macOS", "windows"],
   "windows": ["main"],
   "permissions": [
-    "clipboard-manager:allow-read-text",
-    "clipboard-manager:allow-write-text",
-    "deep-link:default",
-    "dialog:default",
+    "deep-link:allow-get-current",
+    "log:allow-log",
     {
-      "identifier": "fs:allow-read-text-file",
-      "allow": [{ "path": "$APPDATA/demo/*" }]
+      "identifier": "opener:allow-open-url",
+      "allow": [{ "url": "https://*" }, { "url": "http://*" }]
     },
-    {
-      "identifier": "fs:allow-write-text-file",
-      "allow": [{ "path": "$APPDATA/demo/*" }]
-    },
-    {
-      "identifier": "fs:allow-mkdir",
-      "allow": [{ "path": "$APPDATA/demo" }]
-    },
-    {
-      "identifier": "fs:allow-exists",
-      "allow": [{ "path": "$APPDATA/demo*" }]
-    },
-    "global-shortcut:allow-is-registered",
-    "global-shortcut:allow-register",
-    "global-shortcut:allow-unregister",
-    {
-      "identifier": "http:default",
-      "allow": [{ "url": "https://timeapi.io/*" }]
-    },
-    "log:default",
-    "notification:default",
-    "opener:default",
-    "os:allow-locale",
-    "sql:allow-load",
-    "sql:allow-select",
-    "sql:allow-execute",
-    "system-fonts:default",
-    "updater:default"
+    "system-fonts:allow-get-system-fonts"
   ]
 }

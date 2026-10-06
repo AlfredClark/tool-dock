@@ -5,16 +5,11 @@ use tauri::Runtime;
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub mod autostart;
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub mod clipboard;
-pub mod deep_link;
-pub mod dialog;
-pub mod fs;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-pub mod global_shortcut;
+pub mod deep_link;
 pub mod http;
 pub mod log;
-pub mod notification;
 pub mod opener;
 pub mod os;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -45,9 +40,6 @@ pub trait BuilderExt<R: Runtime> {
     /// 注册深链插件；移动端为空操作（该平台未声明依赖）
     #[must_use]
     fn with_deep_link(self) -> Self;
-    /// 注册全局快捷键插件；移动端为空操作（该平台未声明 `global-shortcut` 依赖）
-    #[must_use]
-    fn with_global_shortcut(self) -> Self;
 }
 
 // 桌面端实现收窄到 `Wry`：单实例构造器是 `Wry` 具体的，泛型 `R` 调不动
@@ -73,10 +65,6 @@ impl BuilderExt<tauri::Wry> for tauri::Builder<tauri::Wry> {
     fn with_deep_link(self) -> Self {
         self.plugin(deep_link::init())
     }
-
-    fn with_global_shortcut(self) -> Self {
-        self.plugin(global_shortcut::init())
-    }
 }
 
 #[cfg(any(target_os = "android", target_os = "ios"))]
@@ -100,14 +88,14 @@ impl<R: Runtime> BuilderExt<R> for tauri::Builder<R> {
     fn with_deep_link(self) -> Self {
         self
     }
-
-    fn with_global_shortcut(self) -> Self {
-        self
-    }
 }
 
 /// 应用启动时的插件运行时收尾（对标 `cores::setup`）：目前只有深链协议的
 /// Win/Linux 运行时注册；各插件的具体收尾放在各自文件的 `setup` 内，这里只做串联
 pub fn setup(app: &tauri::App) {
+    // `deep_link` 模块仅桌面端编译，移动端无事可做
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     deep_link::setup(app);
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    let _ = app;
 }

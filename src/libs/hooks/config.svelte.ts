@@ -4,6 +4,7 @@
 import commands from "$libs/commands";
 import { reportCommandFailure } from "$libs/commands/cores";
 import type { ConfigPatch, Config_Serialize } from "$libs/commands/types";
+import { getLocale, setLocale } from "$libs/i18n/paraglide/runtime";
 
 /** 配置的前端视图：命令返回值恒为全字段必填的 `Config_Serialize` */
 export type AppConfig = Config_Serialize;
@@ -31,6 +32,30 @@ export async function hydrateConfig(): Promise<void> {
       });
     if (!failed) return;
     if (attempt === 0) await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+}
+
+/** 后台水合 + 语言对齐：与首帧渲染并发，完成后把前端语言对齐到后端配置 */
+let alignedOnce = false;
+/** 仅测试用：重置单次守卫（模块变量无法经 `configState` 复位） */
+export function __resetAlignForTests(): void {
+  alignedOnce = false;
+}
+export async function hydrateAndAlignLocale(): Promise<void> {
+  // 根布局挂载时调一次；HMR 重挂载不重复跑，避免已对齐的语言被反复重设
+  if (alignedOnce) return;
+  alignedOnce = true;
+  try {
+    await hydrateConfig();
+  } catch (error) {
+    // 链式 API 永不 reject，此处仅防命令构造期同步抛错导致对齐中断
+    reportCommandFailure("[config] hydrate threw", error);
+    return;
+  }
+  // 不触发整页重载，否则会出现语言闪烁；水合失败则回落 Paraglide 本地策略
+  const locale = configState.value?.locale;
+  if (locale && locale !== getLocale()) {
+    setLocale(locale, { reload: false });
   }
 }
 

@@ -1,7 +1,7 @@
 // 外部链接薄封装：调用失败一律返回假，浏览器预览与单测环境下调用方只需分支提示。
 // 仅允许 `http(s)` 外链：`package.json` 的仓库地址是 `git+https://` 前缀，需先剥离再校验，
-// 其它 scheme（如 `file:` / `javascript:` / `mailto:`）一律拒绝，避免 `opener:default`
-// 能力被误用；后续需要邮箱/本地资源入口时再扩展白名单。
+// 其它 scheme（如 `file:` / `javascript:` / `mailto:`）一律拒绝，避免 `opener:allow-open-url`
+// 能力被误用（capability 的 `allow` 域同样只放行 `http(s)`，双层收敛）；后续需要邮箱/本地资源入口时再扩展白名单。
 import { reportCommandFailure } from "$libs/commands/cores";
 
 /**

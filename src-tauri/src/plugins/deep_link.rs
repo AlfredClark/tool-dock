@@ -18,7 +18,3 @@ pub fn setup(app: &tauri::App) {
         log::warn!("failed to register deep link schemes: {err:#}");
     }
 }
-
-/// 移动端空实现：该平台未声明 `deep-link` 依赖
-#[cfg(any(target_os = "android", target_os = "ios"))]
-pub fn setup(_app: &tauri::App) {}

@@ -16,8 +16,8 @@ beforeEach(() => {
 
 describe("isDeepLink", () => {
   it("仅接受本应用协议", () => {
-    expect(isDeepLink("tdt://settings")).toBe(true);
-    expect(isDeepLink("tdt://")).toBe(true);
+    expect(isDeepLink("tool-dock://settings")).toBe(true);
+    expect(isDeepLink("tool-dock://")).toBe(true);
     expect(isDeepLink("https://example.com")).toBe(false);
     expect(isDeepLink("other://settings")).toBe(false);
     expect(isDeepLink("")).toBe(false);
@@ -26,38 +26,38 @@ describe("isDeepLink", () => {
 
 describe("routeForUrl", () => {
   it("映射已知路径到应用内路由", () => {
-    expect(routeForUrl("tdt://settings")).toBe("/settings");
-    expect(routeForUrl("tdt:///settings")).toBe("/settings");
-    expect(routeForUrl("tdt://about")).toBe("/about");
-    expect(routeForUrl("tdt://about?tab=1")).toBe("/about");
-    expect(routeForUrl("tdt://")).toBe("/");
-    expect(routeForUrl("tdt:///")).toBe("/");
+    expect(routeForUrl("tool-dock://settings")).toBe("/settings");
+    expect(routeForUrl("tool-dock:///settings")).toBe("/settings");
+    expect(routeForUrl("tool-dock://about")).toBe("/about");
+    expect(routeForUrl("tool-dock://about?tab=1")).toBe("/about");
+    expect(routeForUrl("tool-dock://")).toBe("/");
+    expect(routeForUrl("tool-dock:///")).toBe("/");
   });
 
   it("未知路径与非本协议回落空", () => {
-    expect(routeForUrl("tdt://unknown")).toBeNull();
+    expect(routeForUrl("tool-dock://unknown")).toBeNull();
     expect(routeForUrl("https://example.com")).toBeNull();
   });
 });
 
 describe("handleDeepLinkUrl", () => {
   it("命中跳转并提示", () => {
-    handleDeepLinkUrl("tdt://settings");
+    handleDeepLinkUrl("tool-dock://settings");
 
     expect(gotoMock).toHaveBeenCalledWith("/settings");
     expect(toastMocks.info).toHaveBeenCalled();
   });
 
   it("未知路径停留并警告", () => {
-    handleDeepLinkUrl("tdt://nope");
+    handleDeepLinkUrl("tool-dock://nope");
 
     expect(gotoMock).not.toHaveBeenCalled();
     expect(toastMocks.warning).toHaveBeenCalled();
   });
 
   it("短窗内重复到达只处理一次", () => {
-    handleDeepLinkUrl("tdt://about");
-    handleDeepLinkUrl("tdt://about");
+    handleDeepLinkUrl("tool-dock://about");
+    handleDeepLinkUrl("tool-dock://about");
 
     expect(gotoMock).toHaveBeenCalledTimes(1);
   });
@@ -67,13 +67,13 @@ describe("handleDeepLinkUrl", () => {
     vi.useFakeTimers();
     try {
       vi.setSystemTime(1_000_000);
-      handleDeepLinkUrl("tdt://about?victim=1");
+      handleDeepLinkUrl("tool-dock://about?victim=1");
       for (let index = 0; index < 150; index += 1) {
-        handleDeepLinkUrl(`tdt://about?burst=${index}`);
+        handleDeepLinkUrl(`tool-dock://about?burst=${index}`);
       }
       // 受害者早被挤出，同窗重到会再次处理
       const before = gotoMock.mock.calls.length;
-      handleDeepLinkUrl("tdt://about?victim=1");
+      handleDeepLinkUrl("tool-dock://about?victim=1");
       expect(gotoMock.mock.calls.length).toBe(before + 1);
     } finally {
       vi.useRealTimers();
@@ -85,15 +85,15 @@ describe("handleDeepLinkUrl", () => {
     try {
       vi.setSystemTime(1_000_000);
       for (let index = 0; index < 110; index += 1) {
-        handleDeepLinkUrl(`tdt://about?fill=${index}`);
+        handleDeepLinkUrl(`tool-dock://about?fill=${index}`);
       }
-      handleDeepLinkUrl("tdt://about?fresh=1");
+      handleDeepLinkUrl("tool-dock://about?fresh=1");
       const before = gotoMock.mock.calls.length;
       // fresh 未被淘汰（淘汰的是最旧的 filler），重复到达仍忽略
-      handleDeepLinkUrl("tdt://about?fresh=1");
+      handleDeepLinkUrl("tool-dock://about?fresh=1");
       expect(gotoMock.mock.calls.length).toBe(before);
       // 已淘汰的最旧 filler 重到会再次处理
-      handleDeepLinkUrl("tdt://about?fill=0");
+      handleDeepLinkUrl("tool-dock://about?fill=0");
       expect(gotoMock.mock.calls.length).toBe(before + 1);
     } finally {
       vi.useRealTimers();

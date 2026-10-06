@@ -126,7 +126,7 @@ jobs:
         uses: pnpm/setup@v2
         with:
           # pnpm 版本必须与 package.json 的 packageManager 保持一致
-          version: 12.6.0
+          version: 12.9.1
           runtime: node@24
           cache: true
 
@@ -134,7 +134,7 @@ jobs:
         # toolchain 版本必须与 rust-toolchain.toml 保持一致
         uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: 1.98.0
+          toolchain: 1.99.0
           components: rustfmt, clippy
 
       - name: Cache

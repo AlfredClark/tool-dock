@@ -1,3 +1,5 @@
+//! 外部打开插件初始化：前端经 `openExternal` 网关统一出口，此处只做注册。
+
 use tauri::Runtime;
 use tauri::plugin::Plugin;
 

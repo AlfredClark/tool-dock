@@ -1,17 +1,17 @@
 [package]
-name = "tauri-desktop-template"
-version = "0.3.0"
+name = "tool-dock"
+version = "0.1.0"
 edition = "2024"
 authors = ["Alfred Clark"]
-description = "Desktop application development template based on Tauri and Svelte."
-repository = "https://github.com/AlfredClark/tauri-desktop-template"
-keywords = ["tauri", "desktop", "template"]
+description = "A cross-platform desktop toolbox."
+repository = "https://github.com/AlfredClark/tool-dock"
+keywords = ["tauri", "desktop", "toolbox"]
 categories = ["gui"]
 readme = "../README.md"
 license = "GPL-3.0-only"
 
 [lib]
-name = "tauri_desktop_template_lib"
+name = "tool_dock_lib"
 crate-type = ["rlib"]
 
 [lints]
@@ -39,12 +39,9 @@ anyhow = "1.0.104"
 # 与 `@tauri-apps/plugin-sql` 同 minor（`check-version-sync` 会校验）
 tauri-plugin-sql = { version = "2", features = ["sqlite"] }
 tauri-plugin-system-fonts = "2.0.2"
-tauri-plugin-fs = "2"
-tauri-plugin-dialog = "2"
 tauri-plugin-clipboard-manager = "2"
-tauri-plugin-notification = "2"
-# 与 `@tauri-apps/plugin-http` 同 minor（npm 侧无 2.7，只有 2.6；`check-version-sync` 会校验）
-tauri-plugin-http = "2.6"
+# 与 `@tauri-apps/plugin-http` 同 minor（`check-version-sync` 会校验）
+tauri-plugin-http = "2"
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-updater = "2"
@@ -52,4 +49,3 @@ tauri-plugin-autostart = "2"
 tauri-plugin-window-state = "2"
 tauri-plugin-single-instance = "2"
 tauri-plugin-deep-link = "2"
-tauri-plugin-global-shortcut = "2"

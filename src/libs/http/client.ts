@@ -3,7 +3,7 @@
 import type { HttpErrorKind } from "$libs/http/types";
 import { HttpError } from "$libs/http/types";
 
-/** 默认总超时；演示接口 RTT 毫秒级，10s 足够区分真故障与慢网络 */
+/** 默认总超时；外部接口 RTT 毫秒级，10s 足够区分真故障与慢网络 */
 export const DEFAULT_TIMEOUT_MS = 10_000;
 /** 默认重试次数（不含首次）；仅超时与网络错误值得重试 */
 export const DEFAULT_RETRIES = 1;

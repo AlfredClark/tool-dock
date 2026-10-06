@@ -13,8 +13,7 @@ const MENU_TOGGLE: &str = "tray-toggle";
 /// 退出菜单项 id
 const MENU_QUIT: &str = "tray-quit";
 
-/// 托盘图标资源：专用 `tray.png`（由 `64x64.png` 复制而来，独立演进不跟随打包图标），
-/// 编译期打进二进制，不走 `resources` 配置，
+/// 托盘图标资源：复用打包图标，编译期打进二进制，不走 `resources` 配置，
 /// 故无需改 `tauri.conf.json`、`capabilities` 与 CSP（托盘与退出全在 Rust 侧）。
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 const TRAY_ICON_BYTES: &[u8] = include_bytes!("../../icons/tray.png");
