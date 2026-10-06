@@ -1,0 +1,11 @@
+_version: 2
+greet:
+  en: Hello, %{name}! You've been greeted from Rust!
+  zh-CN: 你好，%{name}！你受到了Rust的欢迎！
+tray:
+  toggle:
+    en: Show / Hide
+    zh-CN: 显示/隐藏
+  quit:
+    en: Quit
+    zh-CN: 退出应用
