@@ -5,6 +5,7 @@
 //! XML/INI/Properties 解析出的值全是字符串（无类型信息），数字往返会变成字符串，是已知局限。
 //! 业务失败全部装进 [`ConvertOutcome`] 返回，不抛错（输入纠错是常态 UI 状态，不是异常）。
 
+use noyalib::compat::serde_yaml;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use specta::Type;
@@ -195,7 +196,7 @@ pub fn detect_format(text: &str) -> Option<ConvertFormat> {
     if toml::from_str::<toml::Value>(trimmed).is_ok() {
         return Some(ConvertFormat::Toml);
     }
-    if let Ok(value) = serde_yml::from_str::<Value>(trimmed)
+    if let Ok(value) = serde_yaml::from_str::<Value>(trimmed)
         && (value.is_object() || value.is_array())
     {
         return Some(ConvertFormat::Yaml);
@@ -206,7 +207,7 @@ pub fn detect_format(text: &str) -> Option<ConvertFormat> {
     if is_properties_like(trimmed) {
         return Some(ConvertFormat::Properties);
     }
-    if serde_yml::from_str::<Value>(trimmed).is_ok() {
+    if serde_yaml::from_str::<Value>(trimmed).is_ok() {
         return Some(ConvertFormat::Yaml);
     }
     None
@@ -272,7 +273,7 @@ fn parse_input(input: &str, source: ConvertFormat) -> Result<Value, ParseFailure
         ConvertFormat::Json => serde_json::from_str(input).map_err(|err: serde_json::Error| {
             ParseFailure::at(err.to_string(), err.line(), Some(err.column()))
         }),
-        ConvertFormat::Yaml => serde_yml::from_str(input).map_err(|err| {
+        ConvertFormat::Yaml => serde_yaml::from_str(input).map_err(|err| {
             err.location().map_or_else(
                 || ParseFailure::new(err.to_string()),
                 |location| {
@@ -332,7 +333,7 @@ fn serialize_output(
 ) -> Result<String, (ErrorCode, ParseFailure)> {
     match to {
         ConvertFormat::Json => Ok(format_json(value, options.json_indent)),
-        ConvertFormat::Yaml => serde_yml::to_string(value)
+        ConvertFormat::Yaml => serde_yaml::to_string(value)
             .map_err(|err| ser_fail(ErrorCode::ParseFailed, err.to_string())),
         ConvertFormat::Toml => json_to_toml_string(value),
         ConvertFormat::Xml => Ok(value_to_xml(value, options)),
@@ -618,7 +619,7 @@ fn parse_xml(input: &str) -> Result<Value, ParseFailure> {
             Event::Empty(empty) => return empty_to_value(&reader, &empty),
             Event::Text(text) => {
                 if !text
-                    .xml_content()
+                    .xml_content(quick_xml::XmlVersion::Implicit1_0)
                     .map_err(|err| ParseFailure::new(err.to_string()))?
                     .trim()
                     .is_empty()
@@ -690,7 +691,8 @@ fn attributes_to_map(
         let attr = attr.map_err(|err| ParseFailure::new(err.to_string()))?;
         let key = format!("@{}", element_name(&attr.key)?);
         let value = attr
-            .decode_and_unescape_value(reader.decoder())
+            // 属性值按 XML 规范做空白归一化（`\t`/`\r`/`\n` → 空格），与元素文本的实体解码语义一致
+            .decoded_and_normalized_value(quick_xml::XmlVersion::Implicit1_0, reader.decoder())
             .map_err(|err| ParseFailure::new(err.to_string()))?;
         attrs.insert(key, Value::String(value.into_owned()));
     }
@@ -741,14 +743,14 @@ fn element_to_value(
             Event::Text(content) => {
                 text.push_str(
                     &content
-                        .xml_content()
+                        .xml_content(quick_xml::XmlVersion::Implicit1_0)
                         .map_err(|err| ParseFailure::new(err.to_string()))?,
                 );
             }
             Event::CData(content) => {
                 text.push_str(
                     &content
-                        .xml_content()
+                        .xml_content(quick_xml::XmlVersion::Implicit1_0)
                         .map_err(|err| ParseFailure::new(err.to_string()))?,
                 );
             }
