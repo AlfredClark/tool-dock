@@ -26,8 +26,10 @@
 
 <div class={cn("flex h-screen w-full flex-col")}>
   <header class={cn("border-b")}>
-    <div class={cn("flex h-10 w-full items-center justify-between bg-background select-none")}>
-      <div class={cn("flex h-full items-center pt-1 pl-1")}>
+    <div
+      class={cn("grid h-10 w-full grid-cols-[1fr_auto_1fr] items-center bg-background select-none")}
+    >
+      <div class={cn("flex h-full items-center justify-start pt-1 pl-1")}>
         <Button
           variant="ghost"
           size="icon-sm"
@@ -37,14 +39,24 @@
         >
           <ArrowLeftIcon />
         </Button>
+        <!-- 左列剩余空白为拖拽区；外层 pt-1/pl-1 留出上左边缘缩放带 -->
+        <div class={cn("h-full flex-1")} data-tauri-drag-region aria-hidden="true"></div>
       </div>
-      <div
-        class={cn("flex h-full w-full flex-1 items-center justify-center pt-1")}
-        data-tauri-drag-region
-      >
-        <span class={cn("truncate text-sm font-medium")} data-tauri-drag-region>{toolName}</span>
+      <!-- 中列外层 pt-1 留出上边缘缩放带，内层整体为拖拽区 -->
+      <div class={cn("flex h-full min-w-0 items-center justify-center pt-1")}>
+        <div class={cn("flex h-full min-w-0 items-center justify-center")} data-tauri-drag-region>
+          <span class={cn("max-w-[40vw] truncate text-sm font-medium")} data-tauri-drag-region
+            >{toolName}</span
+          >
+        </div>
       </div>
-      <WindowButtons />
+      <div class={cn("flex h-full items-center justify-end")}>
+        <!-- 右列空白为拖拽区；pt-1 留出上边缘缩放带，右边缘由 WindowButtons 的 p-1 保留 -->
+        <div class={cn("flex h-full flex-1 items-stretch pt-1")}>
+          <div class={cn("h-full w-full")} data-tauri-drag-region aria-hidden="true"></div>
+        </div>
+        <WindowButtons />
+      </div>
     </div>
   </header>
   <main class={cn("min-h-0 flex-1")}>
