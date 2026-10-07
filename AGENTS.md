@@ -319,7 +319,7 @@ CI（`.github/workflows/ci.yml`）在 `main` 分支上按变更路径触发：
    - `.prettierignore` ↔ `.gitignore` 中的构建产物（Prettier 不读 `.gitignore`）
    - CI backend 的 `changes` 路径过滤器 ↔ 新增的后端配置文件
 5. **构建与忽略：** 构建产物（`target/`、`build/`、`.svelte-kit/`、`src-tauri/gen/`、`node_modules/`、`src/libs/i18n/paraglide/`）均已忽略；`bindings.ts` 虽是生成物但**需要提交**；`Cargo.lock` 需要提交；`static/icon.png` 为图标源文件（`pnpm tauri:icon` 生成各平台图标）。Vite 固定端口 `1420`，忽略监听 `src-tauri/**`，`clearScreen: false` 以保留 Rust 日志。主窗口初始 `visible: false`（防恢复闪烁），由 `cores/config.rs` 的 `setup` 按记住窗口配置恢复后统一 `show`，任何提前返回前必须显示，否则永久黑屏；仅恢复 `main` 窗口。
-6. **工具新增流程：** `messages/` 加 `tool_<id>_name/description`（分类新增同步加 `tool_category_*`）→ `pnpm i18n:compile` → `libs/tools/registry.ts` 加条目（`id` / `path` / `category` / 文案函数 / 图标；新分类先扩 `TOOL_CATEGORIES` 元组）→ `routes/(tools)/<分类>/<工具名>/+page.svelte` 建路由（只做组装，内部组件放 `components/tools/<分类>/<工具名>/`）→ 标题栏经 `resolveTool` 自动取名字，无需改 `(tools)/+layout.svelte` → 深链详情分支按注册表校验放行（列表页 `/tools` 已有映射，新工具路径自动生效，仅需在前后端深链单测补用例）→ 前后端单测（注册表 + 网格 + 布局）→ 联调。禁止在首页 / 网格 / 标题栏 / 深链四处任一处硬编码工具信息。
+6. **工具新增流程：** `messages/` 加 `tool_<id>_name/description`（分类新增同步加 `tool_category_*`）→ `pnpm i18n:compile` → `libs/tools/registry.ts` 加条目（`id` / `path` / `category` / 文案函数 / 图标；新分类先扩 `TOOL_CATEGORIES` 元组）→ `routes/(tools)/<分类>/<工具名>/+page.svelte` 建路由（只做组装，内部组件放 `components/tools/<分类>/<工具名>/`）→ 标题栏经 `resolveTool` 自动取名字，无需改 `(tools)/+layout.svelte` → 深链详情分支按注册表校验放行（列表页 `/tools` 已有映射，新工具路径自动生效，仅需在前后端深链单测补用例）→ 前后端单测（注册表 + 网格 + 布局）→ 联调。禁止在首页 / 网格 / 标题栏 / 深链四处任一处硬编码工具信息。工具相关的 `features/` 与 `commands/` 文件按 `<工具分类>_<工具名>.rs` 命名，与工具路由一一对应（如 `text/convert` → `text_convert.rs`），命令函数名按动作命名（如 `convert_data`）。
 
 ---
 

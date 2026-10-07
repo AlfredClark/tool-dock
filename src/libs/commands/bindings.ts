@@ -23,6 +23,10 @@ export const commands = {
 	openConfigDir: () => typedError<null, CommandError>(__TAURI_INVOKE("open_config_dir")),
 	/**  复制系统信息到剪贴板；文本由后端组装，前端只调命令 */
 	copySystemInfo: () => typedError<null, CommandError>(__TAURI_INVOKE("copy_system_info")),
+	/**  转换数据格式；`from` 为空即自动识别。业务失败装进 `ConvertOutcome`，本命令几乎恒返回 `Ok`。 */
+	convertData: (input: string, from: "json" | "yaml" | "toml" | "xml" | "ini" | "properties" | null, to: ConvertFormat, options: ConvertOptions) => typedError<ConvertOutcome, CommandError>(__TAURI_INVOKE("convert_data", { input, from, to, options })),
+	/**  复制转换结果到系统剪贴板；纯文本直写（需 `AppHandle`，故走 `cores`，与 `copy_system_info` 同模式） */
+	copyText: (text: string) => typedError<null, CommandError>(__TAURI_INVOKE("copy_text", { text })),
 	/**  检查更新；无新版返回 `None`（仅桌面端有更新能力） */
 	checkUpdate: () => typedError<{
 	/**  远端版本号 */
@@ -150,6 +154,49 @@ export type Config_Serialize = {
 	/**  关闭窗口行为：缺失、类型不符或无法识别时回落弹窗提示，绝不让整包解析失败 */
 	close_behavior: CloseBehavior,
 };
+
+/**
+ *  业务错误体：扁平结构便于 `specta` 导出，前端按 `code` 分支；
+ *  `line`/`column` 为 1 基位置（解析器给不出时为 `None`，前端仅有值时渲染"第 N 行"）
+ */
+export type ConvertError = {
+	code: ErrorCode,
+	format: ConvertFormat | null,
+	message: string | null,
+	line: number | null,
+	column: number | null,
+};
+
+/**  可转换的数据格式：六变体一次定全，稳定前后端契约（线上传 `lowercase`，与前端下拉取值一致） */
+export type ConvertFormat = "json" | "yaml" | "toml" | "xml" | "ini" | "properties";
+
+/**  转换选项（输出端高级选项；无选项的格式忽略对应字段） */
+export type ConvertOptions = {
+	json_indent: JsonIndent,
+	xml_root_name: string,
+	xml_declaration: boolean,
+	xml_indent: JsonIndent,
+	ini_kv_separator: IniKvSeparator,
+	properties_escape_unicode: boolean,
+	xml_trailing_newline: boolean,
+};
+
+/**  转换结果：`ok` 为真时读 `output`/`detected`，为假时读 `error`（输出端保留上次成功内容） */
+export type ConvertOutcome = {
+	ok: boolean,
+	output: string,
+	detected: ConvertFormat | null,
+	error: ConvertError | null,
+};
+
+/**  业务错误码：前端按码映射 i18n 文案，`format`/`message` 只做诊断补充（解析器原文，保持英文） */
+export type ErrorCode = "TooLarge" | "UnknownFormat" | "ParseFailed" | "UnsupportedInput" | "UnsupportedOutput" | "NonTableRoot" | "UnsupportedValue";
+
+/**  INI 键值分隔符（输出端高级选项） */
+export type IniKvSeparator = "compact" | "spaced";
+
+/**  JSON 缩进选项（输出端高级选项；XML 缩进复用同一枚举） */
+export type JsonIndent = "two" | "four" | "tab";
 
 /**  应用支持的语言 */
 export type Locale = "en" | "zh-CN";

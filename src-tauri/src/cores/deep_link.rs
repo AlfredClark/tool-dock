@@ -28,7 +28,7 @@ mod tests {
             "tool-dock://settings".to_owned(),
             "https://example.com".to_owned(),
             "tool-dock://about?tab=1".to_owned(),
-            "tool-dock://text/editor".to_owned(),
+            "tool-dock://text/convert".to_owned(),
             "--single-instance".to_owned(),
         ];
 
@@ -37,7 +37,7 @@ mod tests {
             vec![
                 "tool-dock://settings".to_owned(),
                 "tool-dock://about?tab=1".to_owned(),
-                "tool-dock://text/editor".to_owned()
+                "tool-dock://text/convert".to_owned()
             ]
         );
     }

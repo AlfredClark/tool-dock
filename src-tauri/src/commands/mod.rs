@@ -8,6 +8,7 @@
 
 pub mod config;
 pub mod system;
+pub mod text_convert;
 pub mod updater;
 
 /// 汇总全部命令：既用于 `specta` 生成前端绑定，也用于挂载 `invoke_handler`。
@@ -24,6 +25,8 @@ macro_rules! collect_commands {
             $crate::commands::system::open_log_dir,
             $crate::commands::system::open_config_dir,
             $crate::commands::system::copy_system_info,
+            $crate::commands::text_convert::convert_data,
+            $crate::commands::text_convert::copy_text,
             $crate::commands::updater::check_update,
             $crate::commands::updater::download_and_install_update,
             $crate::commands::updater::restart_app,

@@ -37,8 +37,8 @@ describe("routeForUrl", () => {
   it("映射工具列表与已登记的工具详情页", () => {
     expect(routeForUrl("tool-dock://tools")).toBe("/tools");
     expect(routeForUrl("tool-dock:///tools")).toBe("/tools");
-    expect(routeForUrl("tool-dock://text/editor")).toBe("/text/editor");
-    expect(routeForUrl("tool-dock:///text/editor?from=home")).toBe("/text/editor");
+    expect(routeForUrl("tool-dock://text/convert")).toBe("/text/convert");
+    expect(routeForUrl("tool-dock:///text/convert?from=home")).toBe("/text/convert");
   });
 
   it("未知路径与非本协议回落空", () => {

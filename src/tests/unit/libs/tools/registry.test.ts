@@ -57,14 +57,14 @@ describe("工具搜索", () => {
   });
 
   it("按名称命中且大小写不敏感", () => {
-    const names = searchTools("EDITOR").map((tool) => tool.id);
+    const names = searchTools("CONVERT").map((tool) => tool.id);
 
-    expect(names).toEqual(["text-editor"]);
+    expect(names).toEqual(["data-convert"]);
   });
 
   it("按分类名命中", () => {
     // baseLocale 为英文，分类名为 Text / Image / Network / System
-    expect(searchTools("text").map((tool) => tool.id)).toEqual(["text-editor"]);
+    expect(searchTools("text").map((tool) => tool.id)).toEqual(["data-convert"]);
     expect(searchTools("network")).toEqual([]);
   });
 

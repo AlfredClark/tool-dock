@@ -33,9 +33,9 @@ vi.mock("$libs/utils/window-controls", () => ({
   onWindowResized: vi.fn().mockResolvedValue(null),
 }));
 
-// 工具详情路由状态就地提供最小桩：路径命中注册表的文本编辑工具
+// 工具详情路由状态就地提供最小桩：路径命中注册表的数据互转工具
 vi.mock("$app/state", () => ({
-  page: { url: new URL("http://localhost/text/editor") },
+  page: { url: new URL("http://localhost/text/convert") },
 }));
 
 const gotoMock = vi.hoisted(() => vi.fn());
@@ -67,7 +67,7 @@ describe("工具分组布局", () => {
     renderWithProbe();
 
     // 节点环境无 window，Paraglide 回落 baseLocale，取到英文工具名
-    expect(screen.getByText("Text editor")).not.toBeNull();
+    expect(screen.getByText("Data converter")).not.toBeNull();
     expect(screen.getByText("probe-content")).not.toBeNull();
   });
 

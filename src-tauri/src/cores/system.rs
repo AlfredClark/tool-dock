@@ -177,6 +177,17 @@ pub fn copy_system_info(app: &tauri::AppHandle) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// 写任意纯文本到系统剪贴板（工具输出复制等场景）；图片与 HTML 不在范围内
+pub fn copy_text(app: &tauri::AppHandle, text: &str) -> anyhow::Result<()> {
+    use anyhow::Context;
+    use tauri_plugin_clipboard_manager::ClipboardExt;
+
+    app.clipboard()
+        .write_text(text)
+        .context("failed to write clipboard")?;
+    Ok(())
+}
+
 /// 解析诊断目录并确保存在：日志目录首次可能尚未创建，先建目录再打开
 fn resolve_app_dir(app: &tauri::AppHandle, log: bool) -> anyhow::Result<std::path::PathBuf> {
     use anyhow::Context;
