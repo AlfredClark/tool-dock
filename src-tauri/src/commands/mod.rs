@@ -7,6 +7,7 @@
 #![allow(clippy::unnecessary_wraps)]
 
 pub mod config;
+pub mod image_resize;
 pub mod system;
 pub mod text_convert;
 pub mod updater;
@@ -28,6 +29,11 @@ macro_rules! collect_commands {
             $crate::commands::text_convert::convert_data,
             $crate::commands::text_convert::copy_text,
             $crate::commands::text_convert::read_text_file,
+            $crate::commands::image_resize::read_image_info,
+            $crate::commands::image_resize::get_image_thumbnail,
+            $crate::commands::image_resize::expand_dropped_paths,
+            $crate::commands::image_resize::get_picture_dir,
+            $crate::commands::image_resize::resize_image,
             $crate::commands::updater::check_update,
             $crate::commands::updater::download_and_install_update,
             $crate::commands::updater::restart_app,

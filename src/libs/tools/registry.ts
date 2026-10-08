@@ -1,6 +1,7 @@
 // 工具注册表：首页搜索、工具页网格、`(tools)` 标题栏三处同源，新增工具只需加条目。
 // 文案存消息函数引用（切换语言走整页重载，此处无需响应式包装），调用方使用时再求值。
 import ArrowLeftRightIcon from "@lucide/svelte/icons/arrow-left-right";
+import ScalingIcon from "@lucide/svelte/icons/scaling";
 import { m } from "$libs/i18n/paraglide/messages";
 
 /** 工具分类：新增分类时扩展该元组并补 `tool_category_*` 文案，网格自动多出一组 */
@@ -18,6 +19,14 @@ export const TOOLS = [
     name: m.tool_data_convert_name,
     description: m.tool_data_convert_description,
     icon: ArrowLeftRightIcon,
+  },
+  {
+    id: "image-resize",
+    path: "/image/resize",
+    category: "image",
+    name: m.tool_image_resize_name,
+    description: m.tool_image_resize_description,
+    icon: ScalingIcon,
   },
 ] as const;
 

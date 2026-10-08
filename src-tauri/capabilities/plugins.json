@@ -11,6 +11,8 @@
       "identifier": "opener:allow-open-url",
       "allow": [{ "url": "https://*" }, { "url": "http://*" }]
     },
-    "system-fonts:allow-get-system-fonts"
+    "system-fonts:allow-get-system-fonts",
+    "dialog:allow-open",
+    "dialog:allow-save"
   ]
 }

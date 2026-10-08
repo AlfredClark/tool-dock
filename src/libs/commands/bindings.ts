@@ -29,6 +29,29 @@ export const commands = {
 	copyText: (text: string) => typedError<null, CommandError>(__TAURI_INVOKE("copy_text", { text })),
 	/**  读取拖拽载入的文本文件；路径来自 OS 拖放事件，校验逻辑在 `features::read_text_file` */
 	readTextFile: (path: string) => typedError<string, CommandError>(__TAURI_INVOKE("read_text_file", { path })),
+	/**
+	 *  读取单张图片元信息（尺寸/格式/大小）；路径来自拖放或对话框，后端二次校验。
+	 *  文件打不开抛错走 `CommandError`，前端按单张标红处理，不中断批量。
+	 */
+	readImageInfo: (path: string) => typedError<ImageInfo, CommandError>(__TAURI_INVOKE("read_image_info", { path })),
+	/**
+	 *  读取预览缩略图：等比压到 `max_side` 内，以 `data:` URL 返回（前端 `<img>` 直显）。
+	 *  `asset` 协议需配 scope 才放行本地路径，回 data URL 可保持最小授权。
+	 */
+	getImageThumbnail: (path: string, maxSide: number) => typedError<string, CommandError>(__TAURI_INVOKE("get_image_thumbnail", { path, maxSide })),
+	/**
+	 *  展开拖放路径：文件直通 + 文件夹展平为图片 + 首个文件夹的 `resized/` 建议。
+	 *  枚举失败抛错走 `CommandError`，前端回落原路径逐张处理。
+	 */
+	expandDroppedPaths: (paths: string[]) => typedError<ExpandDropOutcome, CommandError>(__TAURI_INVOKE("expand_dropped_paths", { paths })),
+	/**  系统图片目录：输出目录的默认值；取不到返回 `None`，前端保持空（不阻断）。 */
+	getPictureDir: () => typedError<string | null, CommandError>(__TAURI_INVOKE("get_picture_dir")),
+	/**
+	 *  执行单张缩放；前端逐张调用以驱动进度，单张失败装进 `ResizeSingleOutcome` 跳过继续。
+	 *  CPU 密集活经 `spawn_blocking` 隔离：同步解码/Lanczos3/编码若直接跑在异步运行时上，
+	 *  大图批量时会饿死执行器线程，窗口拖拽等主循环事件跟着卡顿。
+	 */
+	resizeImage: (input: string, options: ResizeOptions) => typedError<ResizeSingleOutcome, CommandError>(__TAURI_INVOKE("resize_image", { input, options })),
 	/**  检查更新；无新版返回 `None`（仅桌面端有更新能力） */
 	checkUpdate: () => typedError<{
 	/**  远端版本号 */
@@ -194,6 +217,35 @@ export type ConvertOutcome = {
 /**  业务错误码：前端按码映射 i18n 文案，`format`/`message` 只做诊断补充（解析器原文，保持英文） */
 export type ErrorCode = "TooLarge" | "UnknownFormat" | "ParseFailed" | "UnsupportedInput" | "UnsupportedOutput" | "NonTableRoot" | "UnsupportedValue";
 
+/**
+ *  拖放路径展开结果：文件原样透传，文件夹展平为其下图片；
+ *  `output_dir` 为首个文件夹下的 `resized/`（前端仅在输出目录为空时采用）
+ */
+export type ExpandDropOutcome = {
+	files: string[],
+	output_dir: string | null,
+};
+
+/**
+ *  精确尺寸的填充策略：拉伸/适应/裁剪/留白（`Contain` 输出即 fitted 尺寸，无画布；
+ *  `Pad` 输出精确画布，留白透明或白色，见 `render`）
+ */
+export type FitMode = "stretch" | "contain" | "cover" | "pad";
+
+/**  支持的输入图片格式：与文件对话框过滤器、扩展名白名单三处同源（见 `SUPPORTED_EXTENSIONS`） */
+export type ImageFormat = "jpeg" | "png" | "webp" | "bmp" | "tiff" | "gif";
+
+/**  图片元信息：列表展示与预计输出尺寸计算用（`file_size` 为字节数，输入有 50MB 上限，转 `u32` 必成功） */
+export type ImageInfo = {
+	width: number,
+	height: number,
+	format: ImageFormat,
+	file_size: number,
+};
+
+/**  手动旋转/翻转：在 EXIF 自动摆正之后、尺寸规划之前应用（90/270 系自动交换宽高） */
+export type ImageRotation = "none" | "cw90" | "cw180" | "ccw90" | "fliphorizontal";
+
 /**  INI 键值分隔符（输出端高级选项） */
 export type IniKvSeparator = "compact" | "spaced";
 
@@ -202,6 +254,61 @@ export type JsonIndent = "two" | "four" | "tab";
 
 /**  应用支持的语言 */
 export type Locale = "en" | "zh-CN";
+
+/**  输出格式：`Original` 保持输入格式（GIF 输入转 PNG，动图只取首帧） */
+export type OutputFormat = "original" | "jpeg" | "png" | "webp";
+
+/**  重名文件处理策略：递增重命名（现状）/ 直接覆盖 / 跳过（错误码 `Skipped`） */
+export type OverwritePolicy = "increment" | "overwrite" | "skip";
+
+/**  业务错误体：扁平结构便于 `specta` 导出，前端按 `code` 分支 */
+export type ResizeError = {
+	code: ResizeErrorCode,
+	message: string | null,
+};
+
+/**  业务错误码：前端按码映射 i18n 文案，`message` 只做诊断补充（英文技术文本） */
+export type ResizeErrorCode = "TooLarge" | "UnsupportedFormat" | "DecodeFailed" | "InvalidSize" | "EncodeFailed" | "OutputNotWritable" | "Skipped";
+
+/**
+ *  缩放插值算法：自建映射枚举（`image::FilterType` 是外部类型，`specta` 导出不了）；
+ *  默认 `Lanczos3` 高质量，`Nearest` 最快但锯齿明显
+ */
+export type ResizeFilter = "nearest" | "triangle" | "catmullrom" | "gaussian" | "lanczos3";
+
+/**  尺寸调整模式：宽高锁定/百分比/精确尺寸（线上传 `lowercase`，与前端参数面板取值一致） */
+export type ResizeMode = { kind: "widthheight"; width: number | null; height: number | null; lock_ratio: boolean } | { kind: "percent"; percent: number } | { kind: "exact"; width: number; height: number; fit: FitMode };
+
+/**
+ *  单张处理选项（前端参数面板全量下发；`quality` 仅 JPEG 生效，1-100，越界钳制；
+ *  `target_size_kb` 仅 JPEG 生效，置位时二分质量并隐藏质量滑块）
+ */
+export type ResizeOptions = {
+	mode: ResizeMode,
+	format: OutputFormat,
+	quality: number,
+	output_dir: string,
+	no_upscale: boolean,
+	filename_suffix: boolean,
+	rotation: ImageRotation,
+	filter: ResizeFilter,
+	overwrite: OverwritePolicy,
+	target_size_kb: number | null,
+};
+
+/**
+ *  单张处理结果：`ok` 为真时读 `output`/输出尺寸，为假时读 `error`（失败跳过继续）；
+ *  `target_met` 仅设目标大小时有值（`None` 即无目标；非 JPEG 时为 `Some(false)`，前端再分“未达成/不适用”）
+ */
+export type ResizeSingleOutcome = {
+	ok: boolean,
+	input: string,
+	output: string | null,
+	width: number | null,
+	height: number | null,
+	error: ResizeError | null,
+	target_met: boolean | null,
+};
 
 /**  运行平台信息：经 `tauri-plugin-os` 采集，全字段必填，前端逐行展示 */
 export type SystemInfo = {

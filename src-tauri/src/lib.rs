@@ -33,6 +33,7 @@ pub fn run() {
         .plugin(plugins::opener::init())
         .plugin(plugins::os::init())
         .plugin(plugins::clipboard::init())
+        .plugin(plugins::dialog::init())
         .plugin(plugins::system_fonts::init())
         .plugin(plugins::http::init())
         .plugin(plugins::sql::init())

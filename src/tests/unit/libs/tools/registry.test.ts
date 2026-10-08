@@ -72,3 +72,19 @@ describe("工具搜索", () => {
     expect(searchTools("不存在的工具zzz")).toEqual([]);
   });
 });
+
+describe("图片尺寸工具", () => {
+  it("注册信息完整", () => {
+    const tool = resolveTool("/image/resize");
+
+    expect(tool?.id).toBe("image-resize");
+    expect(tool?.category).toBe("image");
+    expect(tool?.name()).toBe("Resize");
+  });
+
+  it("搜索命中", () => {
+    const hits = searchTools("Resize").map((tool) => tool.id);
+
+    expect(hits).toContain("image-resize");
+  });
+});
