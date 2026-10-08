@@ -67,10 +67,14 @@ function renderWithProbe(layout: string): Promise<void> {
     render: () => "<span>probe-content</span>",
   }));
   render(LayoutContainer, { props: { children } });
-  // 布局经异步加载器 settle（动态 import 需多轮微任务），等目标布局落定
-  return waitFor(() => {
-    expect(document.querySelector(`[data-layout="${layout}"]`)).not.toBeNull();
-  });
+  // 布局经异步加载器 settle（动态 import 需多轮微任务），等目标布局落定；
+  // 全量并行时 worker 繁忙，超时放宽到 5s（孤立运行时毫秒级，不影响速度）
+  return waitFor(
+    () => {
+      expect(document.querySelector(`[data-layout="${layout}"]`)).not.toBeNull();
+    },
+    { timeout: 5000 },
+  );
 }
 
 beforeEach(() => {
@@ -112,9 +116,12 @@ describe("布局容器", () => {
     await renderWithProbe("tabs");
 
     layoutState.name = "sidebar";
-    await waitFor(() => {
-      expect(document.querySelector('[data-layout="sidebar"]')).not.toBeNull();
-    });
+    await waitFor(
+      () => {
+        expect(document.querySelector('[data-layout="sidebar"]')).not.toBeNull();
+      },
+      { timeout: 5000 },
+    );
     expect(screen.getByText("probe-content")).not.toBeNull();
   });
 
@@ -142,9 +149,12 @@ describe("布局容器", () => {
 
     // 脏数据在 hooks 层已回落，此处模拟注册表缺 key 的极端情形
     layoutState.name = "ghost" as never;
-    await waitFor(() => {
-      expect(document.querySelector('[data-layout="tabs"]')).not.toBeNull();
-    });
+    await waitFor(
+      () => {
+        expect(document.querySelector('[data-layout="tabs"]')).not.toBeNull();
+      },
+      { timeout: 5000 },
+    );
     expect(screen.getByText("probe-content")).not.toBeNull();
   });
 });
