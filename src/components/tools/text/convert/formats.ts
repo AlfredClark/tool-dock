@@ -57,3 +57,29 @@ export function inputFormatItems(): { value: InputFormat; label: string }[] {
 export function outputFormatItems(): { value: ConvertFormat; label: string }[] {
   return OUTPUT_FORMATS.map((value) => ({ value, label: formatLabel(value) }));
 }
+
+/** 浏览器降级路径的文件大小上限：与后端 `MAX_INPUT_LEN` 对齐（1 MiB），改动时两边同步 */
+export const DROP_MAX_BYTES = 1024 * 1024;
+
+/** 文件扩展名→格式映射：拖拽载入时预选输入格式；`Record` 键缺失即未知格式 */
+const EXTENSION_FORMATS: Record<string, ConvertFormat> = {
+  json: "json",
+  yaml: "yaml",
+  yml: "yaml",
+  xml: "xml",
+  toml: "toml",
+  ini: "ini",
+  properties: "properties",
+};
+
+/** 按文件名取格式：未知扩展名返回 `null`（保持当前选择，走自动识别） */
+export function formatFromExtension(filename: string): ConvertFormat | null {
+  const ext = filename.split(".").pop()?.toLowerCase();
+  if (!ext) return null;
+  return EXTENSION_FORMATS[ext] ?? null;
+}
+
+/** 取路径末段文件名（兼容 `/` 与 `\` 分隔符） */
+export function basenameOf(path: string): string {
+  return path.split(/[\\/]/).pop() ?? path;
+}

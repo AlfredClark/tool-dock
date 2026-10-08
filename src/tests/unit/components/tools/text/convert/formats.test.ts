@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   CONVERT_FORMATS,
+  DROP_MAX_BYTES,
   INPUT_FORMATS,
   OUTPUT_FORMATS,
+  basenameOf,
+  formatFromExtension,
   formatLabel,
   inputFormatItems,
   isConvertFormat,
@@ -46,5 +49,28 @@ describe("数据互转格式定义", () => {
     const outputValues = outputFormatItems().map((item) => item.value);
     expect(outputValues).not.toContain("auto");
     expect(outputValues).toHaveLength(CONVERT_FORMATS.length);
+  });
+
+  it("扩展名映射格式（大小写不敏感），未知返回 null", () => {
+    expect(formatFromExtension("data.json")).toBe("json");
+    expect(formatFromExtension("data.YAML")).toBe("yaml");
+    expect(formatFromExtension("data.yml")).toBe("yaml");
+    expect(formatFromExtension("data.xml")).toBe("xml");
+    expect(formatFromExtension("data.toml")).toBe("toml");
+    expect(formatFromExtension("data.ini")).toBe("ini");
+    expect(formatFromExtension("data.properties")).toBe("properties");
+    expect(formatFromExtension("data.txt")).toBeNull();
+    expect(formatFromExtension("noext")).toBeNull();
+    expect(formatFromExtension("")).toBeNull();
+  });
+
+  it("路径末段文件名兼容两种分隔符", () => {
+    expect(basenameOf("/tmp/a.json")).toBe("a.json");
+    expect(basenameOf("C:\\data\\b.yaml")).toBe("b.yaml");
+    expect(basenameOf("plain.toml")).toBe("plain.toml");
+  });
+
+  it("拖放大小上限与后端转换上限对齐（1 MiB）", () => {
+    expect(DROP_MAX_BYTES).toBe(1024 * 1024);
   });
 });

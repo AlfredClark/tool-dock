@@ -25,3 +25,11 @@ pub fn convert_data(
 pub fn copy_text(app: tauri::AppHandle, text: String) -> CommandResult<()> {
     Ok(crate::cores::system::copy_text(&app, &text)?)
 }
+
+/// 读取拖拽载入的文本文件；路径来自 OS 拖放事件，校验逻辑在 `features::read_text_file`
+#[tauri::command]
+#[specta::specta]
+#[allow(clippy::needless_pass_by_value)]
+pub fn read_text_file(path: String) -> CommandResult<String> {
+    Ok(crate::features::text_convert::read_text_file(&path)?)
+}

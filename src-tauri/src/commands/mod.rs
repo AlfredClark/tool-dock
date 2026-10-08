@@ -27,6 +27,7 @@ macro_rules! collect_commands {
             $crate::commands::system::copy_system_info,
             $crate::commands::text_convert::convert_data,
             $crate::commands::text_convert::copy_text,
+            $crate::commands::text_convert::read_text_file,
             $crate::commands::updater::check_update,
             $crate::commands::updater::download_and_install_update,
             $crate::commands::updater::restart_app,

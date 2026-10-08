@@ -27,6 +27,8 @@ export const commands = {
 	convertData: (input: string, from: "json" | "yaml" | "toml" | "xml" | "ini" | "properties" | null, to: ConvertFormat, options: ConvertOptions) => typedError<ConvertOutcome, CommandError>(__TAURI_INVOKE("convert_data", { input, from, to, options })),
 	/**  复制转换结果到系统剪贴板；纯文本直写（需 `AppHandle`，故走 `cores`，与 `copy_system_info` 同模式） */
 	copyText: (text: string) => typedError<null, CommandError>(__TAURI_INVOKE("copy_text", { text })),
+	/**  读取拖拽载入的文本文件；路径来自 OS 拖放事件，校验逻辑在 `features::read_text_file` */
+	readTextFile: (path: string) => typedError<string, CommandError>(__TAURI_INVOKE("read_text_file", { path })),
 	/**  检查更新；无新版返回 `None`（仅桌面端有更新能力） */
 	checkUpdate: () => typedError<{
 	/**  远端版本号 */

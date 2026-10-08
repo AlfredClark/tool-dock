@@ -1,6 +1,8 @@
 <script lang="ts">
   // 数据互转双栏容器：持有页面级状态（格式/选项/文本/识别结果/错误），输入停止 300ms 后经命令链转后端。
   // 空输入直接清空不调命令；过期响应按序号丢弃；IPC 真异常 toast 提示并保留旧输出（plugin-log 自动上报）。
+  // 文件拖放：桌面端走 Tauri 拖放事件取路径 + 后端命令读文件，浏览器走 DOM File 直读；读取后填入输入端走正常转换链。
+  import { getCurrentWebview } from "@tauri-apps/api/webview";
   import commands from "$libs/commands";
   import type {
     ConvertError,
@@ -9,10 +11,18 @@
   } from "$libs/commands/bindings";
   import ConvertPane from "./convert-pane.svelte";
   import { toBindingFormat } from "./convert-errors";
-  import { isConvertFormat, type ConvertFormat, type InputFormat } from "./formats";
+  import {
+    basenameOf,
+    DROP_MAX_BYTES,
+    formatFromExtension,
+    isConvertFormat,
+    type ConvertFormat,
+    type InputFormat,
+  } from "./formats";
   import { m } from "$libs/i18n/paraglide/messages";
   import { toast } from "$libs/utils/toast";
   import { cn } from "$libs/utils/shadcn-svelte";
+  import { onMount } from "svelte";
 
   /** 输入停止后等待转换的防抖时长 */
   const CONVERT_DEBOUNCE_MS = 300;
@@ -56,6 +66,13 @@
 
   // 滚动序号：同行连续点击也要触发跳转，普通变量即可
   let scrollSeq = 0;
+
+  // 拖放悬浮计数：dragenter/dragleave 成对增减（子元素进出会抖动），>0 显示 overlay
+  let dragDepth = $state(0);
+  const dragActive = $derived(dragDepth > 0);
+
+  // Tauri 拖放监听就绪后，DOM drop 只做 preventDefault（防跳页），不再重复读取
+  let tauriDropReady = false;
 
   /** 输入端文本回写：值相同不重复赋值，避免编辑器同步回环 */
   function handleInputText(next: string): void {
@@ -125,6 +142,106 @@
     inputScrollTick = { line, seq: (scrollSeq += 1) };
   }
 
+  /** 文件内容落盘：填入输入端走正常防抖转换；扩展名可识别时预选输入格式（未知则保持当前选择） */
+  function applyDroppedFile(text: string, filename: string): void {
+    inputText = text;
+    const format = formatFromExtension(filename);
+    if (format) inputFormat = format;
+  }
+
+  /** Tauri 路径读取：经后端命令（Rust 侧二次校验存在/类型/大小/UTF-8），失败 toast */
+  async function loadFromPaths(paths: string[]): Promise<void> {
+    const [first] = paths;
+    if (!first) return;
+    if (paths.length > 1) toast.info(m.tool_convert_drop_multiple());
+    const result = await commands.readTextFile(first).result();
+    if (result.status === "error") {
+      toast.error(m.tool_convert_file_read_failed());
+      return;
+    }
+    applyDroppedFile(result.data, basenameOf(first));
+  }
+
+  /** 浏览器降级读取：DOM File 直读（Tauri 不可用时，如 `pnpm dev`）；大小上限与后端对齐 */
+  async function loadFromFiles(files: File[]): Promise<void> {
+    const [first] = files;
+    if (!first) return;
+    if (files.length > 1) toast.info(m.tool_convert_drop_multiple());
+    if (first.size > DROP_MAX_BYTES) {
+      toast.error(m.tool_convert_file_too_large());
+      return;
+    }
+    try {
+      applyDroppedFile(await first.text(), first.name);
+    } catch {
+      toast.error(m.tool_convert_file_read_failed());
+    }
+  }
+
+  /** 是否为文件拖拽：文本选中拖拽不过滤，避免 overlay 误显 */
+  function hasFiles(event: DragEvent): boolean {
+    return event.dataTransfer?.types.includes("Files") ?? false;
+  }
+
+  onMount(() => {
+    const cleanups: (() => void)[] = [];
+
+    // Tauri 拖放事件（桌面端主路径）
+    if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) {
+      getCurrentWebview()
+        .onDragDropEvent((event) => {
+          const payload = event.payload;
+          if (payload.type === "enter") {
+            dragDepth = 1;
+          } else if (payload.type === "leave") {
+            dragDepth = 0;
+          } else if (payload.type === "drop") {
+            dragDepth = 0;
+            void loadFromPaths(payload.paths);
+          }
+        })
+        .then((unlisten) => {
+          tauriDropReady = true;
+          cleanups.push(unlisten);
+        })
+        .catch(() => {
+          tauriDropReady = false;
+        });
+    }
+
+    // DOM 拖放（全环境 overlay + 浏览器降级读取）：dragover 常开 preventDefault 防跳页
+    const handleDragEnter = (event: DragEvent): void => {
+      if (!hasFiles(event)) return;
+      event.preventDefault();
+      dragDepth += 1;
+    };
+    const handleDragOver = (event: DragEvent): void => {
+      event.preventDefault();
+    };
+    const handleDragLeave = (event: DragEvent): void => {
+      if (!hasFiles(event)) return;
+      dragDepth = Math.max(0, dragDepth - 1);
+    };
+    const handleDrop = (event: DragEvent): void => {
+      event.preventDefault();
+      dragDepth = 0;
+      if (tauriDropReady) return;
+      const files = [...(event.dataTransfer?.files ?? [])];
+      if (files.length > 0) void loadFromFiles(files);
+    };
+    window.addEventListener("dragenter", handleDragEnter);
+    window.addEventListener("dragover", handleDragOver);
+    window.addEventListener("dragleave", handleDragLeave);
+    window.addEventListener("drop", handleDrop);
+    return () => {
+      window.removeEventListener("dragenter", handleDragEnter);
+      window.removeEventListener("dragover", handleDragOver);
+      window.removeEventListener("dragleave", handleDragLeave);
+      window.removeEventListener("drop", handleDrop);
+      for (const cleanup of cleanups) cleanup();
+    };
+  });
+
   /** 转换选项快照：逐字段读取进依赖跟踪（直接传代理对象读不到字段变更） */
   function snapshotOptions(): ConvertOptions {
     return {
@@ -181,8 +298,8 @@
   });
 </script>
 
-<!-- 桌面端固定左右双栏：gap-px + bg-border 形成 1px 分隔线 -->
-<div class={cn("flex h-full w-full gap-px bg-border")}>
+<!-- 桌面端固定左右双栏：gap-px + bg-border 形成 1px 分隔线；拖放 overlay 盖全区 -->
+<div class={cn("relative flex h-full w-full gap-px bg-border")}>
   <ConvertPane
     side="input"
     format={inputFormat}
@@ -215,4 +332,15 @@
     onCopy={() => void handleCopyOutput()}
     onErrorJump={handleErrorJump}
   />
+  {#if dragActive}
+    <!-- 拖放提示层：不拦截指针事件，drop 落到下层容器由 window 监听处理 -->
+    <div
+      class={cn(
+        "pointer-events-none absolute inset-0 z-10 flex items-center justify-center",
+        "border-2 border-dashed border-primary bg-background/80",
+      )}
+    >
+      <p class={cn("text-sm font-medium text-muted-foreground")}>{m.tool_convert_drop_hint()}</p>
+    </div>
+  {/if}
 </div>

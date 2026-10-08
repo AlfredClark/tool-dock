@@ -158,6 +158,28 @@ impl ConvertOutcome {
     }
 }
 
+/// 读取拖拽载入的文本文件：路径来自 OS 拖放事件，后端二次校验
+/// （存在性/文件类型/大小/UTF-8）；大小上限与转换输入一致，超限即拒收。
+/// 文件读取失败是偶发异常（非输入纠错态），直接抛错走 `CommandError`。
+pub fn read_text_file(path: &str) -> anyhow::Result<String> {
+    use anyhow::Context;
+
+    let metadata =
+        std::fs::metadata(path).with_context(|| format!("cannot access file: {path}"))?;
+    if !metadata.is_file() {
+        anyhow::bail!("not a regular file: {path}");
+    }
+    if metadata.len() > MAX_INPUT_LEN as u64 {
+        anyhow::bail!("file exceeds the 1 MiB limit: {path}");
+    }
+    let bytes = std::fs::read(path).with_context(|| format!("cannot read file: {path}"))?;
+    // 元数据与读取之间文件可能变大，读后二次校验（超大文件已被元数据预检拦下，此处只防竞态）
+    if bytes.len() > MAX_INPUT_LEN {
+        anyhow::bail!("file exceeds the 1 MiB limit: {path}");
+    }
+    String::from_utf8(bytes).context("file is not valid UTF-8 text")
+}
+
 /// 字节偏移转 1 基行列号（`quick-xml` 与 TOML 只给字节偏移时用）：
 /// 切片按字符边界保护，列号按字符计（中文行的字节列会误导跳转）
 fn line_col_of(input: &str, byte_offset: u64) -> (u32, u32) {
@@ -1540,5 +1562,41 @@ mod tests {
         );
         assert!(tailed.ok);
         assert!(tailed.output.ends_with("</root>\n"));
+    }
+
+    /// 拖拽载入的临时文件路径：进程隔离命名，并行测试不互踩
+    fn drop_probe_path(name: &str) -> std::path::PathBuf {
+        std::env::temp_dir().join(format!("tool-dock-drop-{}-{name}", std::process::id()))
+    }
+
+    #[test]
+    fn read_text_file_roundtrip() {
+        let path = drop_probe_path("ok.json");
+        std::fs::write(&path, r#"{"a": 1}"#).unwrap();
+        let text = read_text_file(path.to_str().unwrap()).unwrap();
+        assert_eq!(text, r#"{"a": 1}"#);
+        std::fs::remove_file(&path).unwrap();
+    }
+
+    #[test]
+    fn read_text_file_rejects_missing_and_directory() {
+        let missing = drop_probe_path("missing.json");
+        assert!(read_text_file(missing.to_str().unwrap()).is_err());
+
+        let dir = std::env::temp_dir();
+        assert!(read_text_file(dir.to_str().unwrap()).is_err());
+    }
+
+    #[test]
+    fn read_text_file_rejects_oversize_and_non_utf8() {
+        let big = drop_probe_path("big.json");
+        std::fs::write(&big, vec![b'x'; MAX_INPUT_LEN + 1]).unwrap();
+        assert!(read_text_file(big.to_str().unwrap()).is_err());
+        std::fs::remove_file(&big).unwrap();
+
+        let binary = drop_probe_path("binary.bin");
+        std::fs::write(&binary, [0xFF, 0xFE, 0x00]).unwrap();
+        assert!(read_text_file(binary.to_str().unwrap()).is_err());
+        std::fs::remove_file(&binary).unwrap();
     }
 }
