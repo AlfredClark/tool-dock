@@ -3,3 +3,4 @@
 //! 工具类模块按 `<工具分类>_<工具名>` 命名，与工具路由一一对应（如 `text/convert` → `text_convert`）。
 pub mod image_resize;
 pub mod text_convert;
+pub mod video_metadata;

@@ -13,6 +13,40 @@ export const commands = {
 	 *  界面语言亦经此切换——运行时 `rust_i18n` 由 `config::apply_runtime_effects` 统一同步。
 	 */
 	updateConfig: (patch: ConfigPatch) => typedError<Config_Serialize, CommandError>(__TAURI_INVOKE("update_config", { patch })),
+	/**
+	 *  查询 ffmpeg/ffprobe 可用性与版本；永不抛错，不可用即 `available: false`
+	 *  （前端据此展示下载入口）
+	 */
+	getFfmpegStatus: () => typedError<FfmpegStatus, CommandError>(__TAURI_INVOKE("get_ffmpeg_status")),
+	/**
+	 *  确保可用：已可用直接返回状态，否则下载托管版（进度经事件推送）后复查返回；
+	 *  网络 + 解包密集活经 `spawn_blocking` 隔离，不饿死异步运行时（同 `resize_image`）
+	 */
+	ensureFfmpeg: () => typedError<FfmpegStatus, CommandError>(__TAURI_INVOKE("ensure_ffmpeg")),
+	/**
+	 *  强制重装托管版：FFmpeg 管理页修复入口，无视系统版，清空后全量重装；
+	 *  调度语义同 `ensure_ffmpeg`
+	 */
+	reinstallManagedFfmpeg: () => typedError<FfmpegStatus, CommandError>(__TAURI_INVOKE("reinstall_managed_ffmpeg")),
+	/**  读取单文件元数据（容器/时长/大小/首视频流/标签）；路径来自对话框，后端校验扩展名 */
+	readVideoMetadata: (path: string) => typedError<VideoFileMetadata, CommandError>(__TAURI_INVOKE("read_video_metadata", { path })),
+	/**
+	 *  读取海报帧：`seek_seconds` 处单帧 PNG，以 `data:` URL 返回（前端 `<img>` 直显，
+	 *  与图片缩略图同最小授权口径）；失败前端降级为空预览，不降级条目
+	 */
+	getVideoThumbnail: (path: string, maxSide: number, seekSeconds: number | null) => typedError<string, CommandError>(__TAURI_INVOKE("get_video_thumbnail", { path, maxSide, seekSeconds })),
+	/**
+	 *  写入单文件标签；输出路径由后端按输出目录 + 原名计算，单文件失败装进
+	 *  `VideoApplyOutcome` 跳过继续（前端逐项调用以驱动进度）
+	 */
+	applyVideoMetadata: (input: string, options: VideoApplyOptions) => typedError<VideoApplyOutcome, CommandError>(__TAURI_INVOKE("apply_video_metadata", { input, options })),
+	/**
+	 *  展开拖放路径：文件直通 + 文件夹展平为视频 + 首个文件夹的 `edited/` 建议。
+	 *  枚举失败抛错走 `CommandError`，前端回落原路径逐项处理。
+	 */
+	expandDroppedVideoPaths: (paths: string[]) => typedError<ExpandDropOutcome, CommandError>(__TAURI_INVOKE("expand_dropped_video_paths", { paths })),
+	/**  系统视频目录：输出目录的默认值；取不到返回 `None`，前端保持空（不阻断）。 */
+	getVideoDir: () => typedError<string | null, CommandError>(__TAURI_INVOKE("get_video_dir")),
 	/**  采集运行平台信息；单项缺失时回落 `"unknown"`，绝不抛错 */
 	getSystemInfo: () => typedError<SystemInfo, CommandError>(__TAURI_INVOKE("get_system_info")),
 	/**  真退出应用进程；调用后进程结束，结果体永不可达（按 `CommandResult<()>` 保持命令类型统一） */
@@ -214,6 +248,30 @@ export type ConvertOutcome = {
 	error: ConvertError | null,
 };
 
+/**  封面结果：跳过类均不影响 `ok`（标签照写），前端按值展示备注 */
+export type CoverResult = 
+/**  未动（保持原封面） */
+"Kept" | 
+/**  已嵌入 */
+"Embedded" | 
+/**  已清除 */
+"Cleared" | 
+/**  无文件可嵌（模板解析无命中） */
+"SkippedNoFile" | 
+/**  容器不支持封面（如 AVI） */
+"SkippedUnsupported" | 
+/**  封面文件损坏不可解码 */
+"SkippedInvalid";
+
+/**
+ *  封面意图（前端展开后下发）：`file` 为展开后的文件名（相对视频同目录、绝对均可，
+ *  无后缀自动识别），`None` 即保持；`clear` 置位即清除（与 `file` 互斥，置位优先）
+ */
+export type CoverSpec = {
+	file: string | null,
+	clear: boolean,
+};
+
 /**  业务错误码：前端按码映射 i18n 文案，`format`/`message` 只做诊断补充（解析器原文，保持英文） */
 export type ErrorCode = "TooLarge" | "UnknownFormat" | "ParseFailed" | "UnsupportedInput" | "UnsupportedOutput" | "NonTableRoot" | "UnsupportedValue";
 
@@ -224,6 +282,22 @@ export type ErrorCode = "TooLarge" | "UnknownFormat" | "ParseFailed" | "Unsuppor
 export type ExpandDropOutcome = {
 	files: string[],
 	output_dir: string | null,
+};
+
+/**  二进制来源：托管版（已校验的固定版本）优先，系统 `PATH` 版仅作兜底 */
+export type FfmpegOrigin = "managed" | "system";
+
+/**  引擎状态：前端状态卡的唯一数据源；不可用时版本与来源均为 `None` */
+export type FfmpegStatus = {
+	available: boolean,
+	origin: FfmpegOrigin | null,
+	ffmpeg_version: string | null,
+	ffprobe_version: string | null,
+	/**  当前 pin 的托管版本（目录名），升级即换资产表 */
+	pinned_version: string,
+	/**  当前二进制路径（排障展示用；托管即托管目录下，系统即 `PATH` 命中） */
+	ffmpeg_path: string | null,
+	ffprobe_path: string | null,
 };
 
 /**
@@ -330,6 +404,69 @@ export type UpdateInfo = {
 	current_version: string,
 	/**  发布说明（`latest.json` 的 `body`，可能缺失） */
 	body: string | null,
+};
+
+/**  单文件写入选项（前端参数面板全量下发；输出路径由后端按输出目录 + 原名计算） */
+export type VideoApplyOptions = {
+	tags: VideoTags,
+	output_dir: string,
+	overwrite: OverwritePolicy,
+	cover: CoverSpec,
+};
+
+/**
+ *  单文件写入结果：`ok` 为真读 `output`，为假读 `error`（失败跳过继续，与图片侧同约定）；
+ *  封面 outcome 单独表达（`cover` 跳过不影响 `ok`，标签照写）
+ */
+export type VideoApplyOutcome = {
+	ok: boolean,
+	input: string,
+	output: string | null,
+	error: VideoMetadataError | null,
+	cover: CoverResult,
+};
+
+/**  单文件元数据读取结果：`ffprobe -print_format json -show_format -show_streams` 的子集 */
+export type VideoFileMetadata = {
+	/**  容器名原文（如 `mov,mp4,m4a,3gp,3g2,mj2`），展示层自行简化 */
+	format_name: string | null,
+	/**  时长秒数 */
+	duration_seconds: number | null,
+	/**  文件字节数（展示用，超 4GiB 饱和为 `u32::MAX`；`specta` 禁止导出 `u64`） */
+	file_size: number | null,
+	stream: VideoStreamInfo | null,
+	/**  是否已有封面（`attached_pic` 视频流或图片附件任一存在） */
+	has_cover: boolean,
+	tags: VideoTags,
+};
+
+/**  业务错误体：扁平结构便于 `specta` 导出，前端按 `code` 分支（与图片侧同约定） */
+export type VideoMetadataError = {
+	code: VideoMetadataErrorCode,
+	message: string | null,
+};
+
+/**  业务错误码：前端按码映射 i18n 文案，`message` 只做诊断补充 */
+export type VideoMetadataErrorCode = "UnsupportedFormat" | "InvalidTags" | "OutputNotWritable" | "FfmpegFailed" | "Skipped";
+
+/**
+ *  首个视频流信息：占位符 `%width%`/`%height%` 与中栏技术行的数据源；
+ *  无视频流（如纯音频 MP4）即 `None`，占位符展开时按未知处理
+ */
+export type VideoStreamInfo = {
+	width: number | null,
+	height: number | null,
+	codec_name: string | null,
+};
+
+/**  通用标题系标签：`None` 即保持原值不动，`Some("")` 即清空该标签 */
+export type VideoTags = {
+	title: string | null,
+	artist: string | null,
+	album: string | null,
+	genre: string | null,
+	date: string | null,
+	comment: string | null,
 };
 
 /* Tauri Specta runtime */

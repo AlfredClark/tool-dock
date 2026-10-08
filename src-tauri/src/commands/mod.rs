@@ -7,10 +7,12 @@
 #![allow(clippy::unnecessary_wraps)]
 
 pub mod config;
+pub mod ffmpeg;
 pub mod image_resize;
 pub mod system;
 pub mod text_convert;
 pub mod updater;
+pub mod video_metadata;
 
 /// 汇总全部命令：既用于 `specta` 生成前端绑定，也用于挂载 `invoke_handler`。
 ///
@@ -21,6 +23,14 @@ macro_rules! collect_commands {
             $crate::commands::config::get_config,
             $crate::commands::config::reset_config,
             $crate::commands::config::update_config,
+            $crate::commands::ffmpeg::get_ffmpeg_status,
+            $crate::commands::ffmpeg::ensure_ffmpeg,
+            $crate::commands::ffmpeg::reinstall_managed_ffmpeg,
+            $crate::commands::video_metadata::read_video_metadata,
+            $crate::commands::video_metadata::get_video_thumbnail,
+            $crate::commands::video_metadata::apply_video_metadata,
+            $crate::commands::video_metadata::expand_dropped_video_paths,
+            $crate::commands::video_metadata::get_video_dir,
             $crate::commands::system::get_system_info,
             $crate::commands::system::quit_app,
             $crate::commands::system::open_log_dir,

@@ -1,11 +1,12 @@
 // 工具注册表：首页搜索、工具页网格、`(tools)` 标题栏三处同源，新增工具只需加条目。
 // 文案存消息函数引用（切换语言走整页重载，此处无需响应式包装），调用方使用时再求值。
 import ArrowLeftRightIcon from "@lucide/svelte/icons/arrow-left-right";
+import ClapperboardIcon from "@lucide/svelte/icons/clapperboard";
 import ScalingIcon from "@lucide/svelte/icons/scaling";
 import { m } from "$libs/i18n/paraglide/messages";
 
 /** 工具分类：新增分类时扩展该元组并补 `tool_category_*` 文案，网格自动多出一组 */
-export const TOOL_CATEGORIES = ["text", "image", "network", "system"] as const;
+export const TOOL_CATEGORIES = ["text", "image", "video", "network", "system"] as const;
 
 /** 工具分类取值 */
 export type ToolCategory = (typeof TOOL_CATEGORIES)[number];
@@ -28,6 +29,14 @@ export const TOOLS = [
     description: m.tool_image_resize_description,
     icon: ScalingIcon,
   },
+  {
+    id: "video-metadata",
+    path: "/video/metadata",
+    category: "video",
+    name: m.tool_video_metadata_name,
+    description: m.tool_video_metadata_description,
+    icon: ClapperboardIcon,
+  },
 ] as const;
 
 /** 单个工具条目 */
@@ -48,6 +57,8 @@ export function categoryLabel(category: string): string {
       return m.tool_category_text();
     case "image":
       return m.tool_category_image();
+    case "video":
+      return m.tool_category_video();
     case "network":
       return m.tool_category_network();
     case "system":

@@ -41,6 +41,8 @@ describe("routeForUrl", () => {
     expect(routeForUrl("tool-dock:///text/convert?from=home")).toBe("/text/convert");
     expect(routeForUrl("tool-dock://image/resize")).toBe("/image/resize");
     expect(routeForUrl("tool-dock:///image/resize?from=home")).toBe("/image/resize");
+    expect(routeForUrl("tool-dock://video/metadata")).toBe("/video/metadata");
+    expect(routeForUrl("tool-dock:///video/metadata?from=home")).toBe("/video/metadata");
   });
 
   it("未知路径与非本协议回落空", () => {
@@ -48,6 +50,7 @@ describe("routeForUrl", () => {
     expect(routeForUrl("tool-dock://tools/unknown")).toBeNull();
     expect(routeForUrl("tool-dock://text/demo")).toBeNull();
     expect(routeForUrl("tool-dock://image/unknown")).toBeNull();
+    expect(routeForUrl("tool-dock://video/unknown")).toBeNull();
     expect(routeForUrl("https://example.com")).toBeNull();
   });
 });

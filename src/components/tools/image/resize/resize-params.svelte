@@ -198,7 +198,7 @@
     };
   }
 
-  /** 百分比滑块：1-500 快调，超范围经右侧数字框输入（后端上限 1000） */
+  /** 百分比滑块：25-400 步长 25 快调，超范围经右侧数字框输入（后端上限 1000） */
   function handlePercentSlider(next: number): void {
     if (next === params.percent) return;
     onParamsChange({ ...params, percent: next });
@@ -309,9 +309,9 @@
             <Slider
               type="single"
               value={params.percent}
-              min={1}
-              max={500}
-              step={1}
+              min={25}
+              max={400}
+              step={25}
               disabled={processing}
               onValueChange={handlePercentSlider}
               class="flex-1"

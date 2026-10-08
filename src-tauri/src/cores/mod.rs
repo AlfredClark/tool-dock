@@ -7,6 +7,7 @@ use tauri_specta::Builder;
 
 pub mod config;
 pub mod deep_link;
+pub mod ffmpeg;
 pub mod locale;
 pub mod specta;
 pub mod system;

@@ -78,7 +78,7 @@ export const DEFAULT_RESIZE_PARAMS: ResizeParamsState = {
   boxHeight: "",
   lockRatio: true,
   noUpscale: true,
-  percent: 50,
+  percent: 100,
   exactWidth: "",
   exactHeight: "",
   fit: "contain",

@@ -13,6 +13,15 @@
     },
     "system-fonts:allow-get-system-fonts",
     "dialog:allow-open",
-    "dialog:allow-save"
+    "dialog:allow-save",
+    {
+      "identifier": "http:allow-fetch",
+      "allow": [
+        { "url": "https://github.com/*" },
+        { "url": "https://objects.githubusercontent.com/*" },
+        { "url": "https://evermeet.cx/*" },
+        { "url": "https://e.deolaha.ca:4242/*" }
+      ]
+    }
   ]
 }

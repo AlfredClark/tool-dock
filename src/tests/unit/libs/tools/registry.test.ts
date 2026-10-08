@@ -88,3 +88,24 @@ describe("图片尺寸工具", () => {
     expect(hits).toContain("image-resize");
   });
 });
+
+describe("视频元数据工具", () => {
+  it("注册信息完整", () => {
+    const tool = resolveTool("/video/metadata");
+
+    expect(tool?.id).toBe("video-metadata");
+    expect(tool?.category).toBe("video");
+    expect(tool?.name()).toBe("Metadata editor");
+  });
+
+  it("搜索命中", () => {
+    const hits = searchTools("Metadata").map((tool) => tool.id);
+
+    expect(hits).toContain("video-metadata");
+  });
+
+  it("视频分类文案已登记", () => {
+    expect(categoryLabel("video")).toBe("Video");
+    expect(isToolCategory("video")).toBe(true);
+  });
+});

@@ -1,8 +1,13 @@
 //! 网络请求插件初始化：前端经 `@tauri-apps/plugin-http` 的 `fetch` 出网。
 //!
-//! 当前未放行任何外部域名（最小授权默认拒绝）：`capabilities/plugins.json` 无 `http` 域条目，
-//! `WebView` 侧 `tauri.conf.json` 的 CSP `connect-src` 亦仅收敛到 IPC 与本地开发源。
-//! 新增出网域名时两处必须同步放行，缺一不可。
+//! 出网域名白名单（含 Rust 侧直连、仅作审计备查）。
+//!
+//! - `github.com` + `objects.githubusercontent.com`：应用更新器与 ffmpeg 托管包（`BtbN` 构建）下载
+//! - `evermeet.cx` + `e.deolaha.ca:4242`：macOS ffmpeg/ffprobe 包（evermeet 主站及重定向镜像）
+//!
+//! ffmpeg 下载走 Rust 侧 `ureq` 直连（`cores::ffmpeg`），不受 `WebView` CSP 约束
+//! （与 `updater` 下载端点同类例外）；前端 `fetch` 若新增以上域名，`capabilities/plugins.json`
+//! 与 `tauri.conf.json` 的 CSP `connect-src` 仍须同步放行，缺一不可。
 
 use tauri::{Runtime, plugin::Plugin};
 
