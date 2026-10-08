@@ -938,7 +938,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d045de693cb712d0b22c6a64be5b953f67b3ce00ab5ad3dd5d8b441886ab8e1a"
 dependencies = [
  "quote",
- "syn 3.0.6",
+ "syn 2.0.119",
 ]
 
 [[package]]
@@ -3043,16 +3043,18 @@ dependencies = [
 
 [[package]]
 name = "noyalib"
-version = "0.0.5"
+version = "0.0.53"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e493c05128df7a83b9676b709d590e0ebc285c7ed3152bc679668e8c1e506af5"
+checksum = "962838abbd8dd2cd3844d2208dc502458bba6985f8bf1dc21761b30260fcbd7f"
 dependencies = [
+ "hashbrown 0.17.1",
  "indexmap 2.14.2",
  "itoa",
+ "libm",
  "memchr",
  "rustc-hash",
  "ryu",
- "serde",
+ "serde_core",
  "serde_ignored",
  "smallvec",
 ]

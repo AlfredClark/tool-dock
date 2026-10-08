@@ -12,6 +12,7 @@ pub mod image_resize;
 pub mod system;
 pub mod text_convert;
 pub mod updater;
+pub mod video_convert;
 pub mod video_metadata;
 
 /// 汇总全部命令：既用于 `specta` 生成前端绑定，也用于挂载 `invoke_handler`。
@@ -31,6 +32,7 @@ macro_rules! collect_commands {
             $crate::commands::video_metadata::apply_video_metadata,
             $crate::commands::video_metadata::expand_dropped_video_paths,
             $crate::commands::video_metadata::get_video_dir,
+            $crate::commands::video_convert::convert_video_format,
             $crate::commands::system::get_system_info,
             $crate::commands::system::quit_app,
             $crate::commands::system::open_log_dir,

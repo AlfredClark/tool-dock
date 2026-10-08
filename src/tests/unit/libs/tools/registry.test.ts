@@ -59,7 +59,7 @@ describe("工具搜索", () => {
   it("按名称命中且大小写不敏感", () => {
     const names = searchTools("CONVERT").map((tool) => tool.id);
 
-    expect(names).toEqual(["data-convert"]);
+    expect(names).toEqual(["data-convert", "video-convert"]);
   });
 
   it("按分类名命中", () => {
@@ -107,5 +107,21 @@ describe("视频元数据工具", () => {
   it("视频分类文案已登记", () => {
     expect(categoryLabel("video")).toBe("Video");
     expect(isToolCategory("video")).toBe(true);
+  });
+});
+
+describe("视频格式转换工具", () => {
+  it("注册信息完整", () => {
+    const tool = resolveTool("/video/convert");
+
+    expect(tool?.id).toBe("video-convert");
+    expect(tool?.category).toBe("video");
+    expect(tool?.name()).toBe("Format converter");
+  });
+
+  it("搜索命中", () => {
+    const hits = searchTools("Format converter").map((tool) => tool.id);
+
+    expect(hits).toContain("video-convert");
   });
 });

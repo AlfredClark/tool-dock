@@ -47,6 +47,11 @@ export const commands = {
 	expandDroppedVideoPaths: (paths: string[]) => typedError<ExpandDropOutcome, CommandError>(__TAURI_INVOKE("expand_dropped_video_paths", { paths })),
 	/**  系统视频目录：输出目录的默认值；取不到返回 `None`，前端保持空（不阻断）。 */
 	getVideoDir: () => typedError<string | null, CommandError>(__TAURI_INVOKE("get_video_dir")),
+	/**
+	 *  转换单文件视频到目标容器；输出路径由后端按输出目录 + 原名计算，
+	 *  单文件失败装进 `VideoConvertOutcome` 跳过继续（前端逐项调用以驱动进度）
+	 */
+	convertVideoFormat: (input: string, options: VideoConvertOptions) => typedError<VideoConvertOutcome, CommandError>(__TAURI_INVOKE("convert_video_format", { input, options })),
 	/**  采集运行平台信息；单项缺失时回落 `"unknown"`，绝不抛错 */
 	getSystemInfo: () => typedError<SystemInfo, CommandError>(__TAURI_INVOKE("get_system_info")),
 	/**  真退出应用进程；调用后进程结束，结果体永不可达（按 `CommandResult<()>` 保持命令类型统一） */
@@ -108,6 +113,15 @@ export const commands = {
 };
 
 /* Types */
+/**
+ *  硬件加速器：前端“硬件加速”下拉的数据源；`Cpu` 为软件兜底不下发，探测只返回真实硬加速项。
+ *  第一批仅 `Nvenc`（QSV/AMF/VideoToolbox 留扩展位，加变体即扩展探测与组装）。
+ */
+export type Accelerator = "cpu" | "nvenc";
+
+/**  音频码率：`Default` 即不传 `-b:a`（复刻旧行为，由 ffmpeg 按编码器取默认） */
+export type AudioBitrate = "default" | "kb128" | "kb192" | "kb320";
+
 /**  关闭窗口行为：落盘值为 `snake_case` 字符串，未知一律回落弹窗提示 */
 export type CloseBehavior = "prompt" | "exit" | "minimize_to_tray";
 
@@ -229,6 +243,15 @@ export type ConvertError = {
 /**  可转换的数据格式：六变体一次定全，稳定前后端契约（线上传 `lowercase`，与前端下拉取值一致） */
 export type ConvertFormat = "json" | "yaml" | "toml" | "xml" | "ini" | "properties";
 
+/**  转码模式：智能先复制失败回落重编码；其余两档只跑对应一程 */
+export type ConvertMode = 
+/**  先流复制，失败回落重编码 */
+"auto" | 
+/**  仅流复制换容器，失败直接报错 */
+"copyonly" | 
+/**  直接重编码，不试复制 */
+"reencode";
+
 /**  转换选项（输出端高级选项；无选项的格式忽略对应字段） */
 export type ConvertOptions = {
 	json_indent: JsonIndent,
@@ -298,6 +321,8 @@ export type FfmpegStatus = {
 	/**  当前二进制路径（排障展示用；托管即托管目录下，系统即 `PATH` 命中） */
 	ffmpeg_path: string | null,
 	ffprobe_path: string | null,
+	/**  本机可用的硬加速项（探测失败即空，前端隐藏加速入口，不阻断主流程） */
+	accelerators: Accelerator[],
 };
 
 /**
@@ -331,6 +356,9 @@ export type Locale = "en" | "zh-CN";
 
 /**  输出格式：`Original` 保持输入格式（GIF 输入转 PNG，动图只取首帧） */
 export type OutputFormat = "original" | "jpeg" | "png" | "webp";
+
+/**  输出分辨率：`Source` 即不传 `-vf`（复刻旧行为）；其余按高缩放、宽自适应保比例 */
+export type OutputResolution = "source" | "p1080" | "p720" | "p480";
 
 /**  重名文件处理策略：递增重命名（现状）/ 直接覆盖 / 跳过（错误码 `Skipped`） */
 export type OverwritePolicy = "increment" | "overwrite" | "skip";
@@ -426,6 +454,53 @@ export type VideoApplyOutcome = {
 	cover: CoverResult,
 };
 
+/**  业务错误体：扁平结构便于 `specta` 导出，前端按 `code` 分支（与视频元数据侧同约定） */
+export type VideoConvertError = {
+	code: VideoConvertErrorCode,
+	message: string | null,
+};
+
+/**  业务错误码：前端按码映射 i18n 文案，`message` 只做诊断补充 */
+export type VideoConvertErrorCode = "UnsupportedFormat" | "OutputNotWritable" | "FfmpegFailed" | "Skipped" | 
+/**  编码器与目标容器不兼容（前端切目标即重置，正常走不到；裸调契约的防御） */
+"InvalidOptions";
+
+/**
+ *  单文件转换选项（前端参数面板全量下发；输出路径由后端按输出目录 + 原名计算）。
+ *  新增五字段均有 `serde` 默认值：默认值组合复刻旧 argv，旧前端/旧状态反序列化不炸
+ */
+export type VideoConvertOptions = {
+	target: VideoTarget,
+	mode: ConvertMode,
+	output_dir: string,
+	overwrite: OverwritePolicy,
+	quality?: VideoQuality,
+	preset?: VideoPreset,
+	video_encoder?: VideoEncoder,
+	audio_bitrate?: AudioBitrate,
+	resolution?: OutputResolution,
+	/**  硬件加速：`Cpu` 为默认（旧行为）；`Nvenc` 只影响重编码程，`CopyOnly` 下忽略 */
+	accelerator?: Accelerator,
+};
+
+/**
+ *  单文件转换结果：`ok` 为真读 `output`，为假读 `error`（失败跳过继续，与元数据侧同约定）；
+ *  `tried_copy` 标识产物是否来自流复制（成功 remux 为真，其余为假；失败时为假）
+ */
+export type VideoConvertOutcome = {
+	ok: boolean,
+	input: string,
+	output: string | null,
+	error: VideoConvertError | null,
+	target: VideoTarget,
+	tried_copy: boolean,
+	/**  产物是否实际走硬加速（硬编成功才为真；回落 CPU 成功即为假，前端据此如实展示） */
+	used_hw?: boolean,
+};
+
+/**  视频编码器：线上传 `lowercase`，264/265 系取值即 ffmpeg 编码器名 */
+export type VideoEncoder = "libx264" | "libx265" | "vp9" | "av1" | "mpeg4" | "mpeg2video";
+
 /**  单文件元数据读取结果：`ffprobe -print_format json -show_format -show_streams` 的子集 */
 export type VideoFileMetadata = {
 	/**  容器名原文（如 `mov,mp4,m4a,3gp,3g2,mj2`），展示层自行简化 */
@@ -449,6 +524,12 @@ export type VideoMetadataError = {
 /**  业务错误码：前端按码映射 i18n 文案，`message` 只做诊断补充 */
 export type VideoMetadataErrorCode = "UnsupportedFormat" | "InvalidTags" | "OutputNotWritable" | "FfmpegFailed" | "Skipped";
 
+/**  编码速度：仅 264/265 系拼 `-preset`，其余编码器忽略（前端按编码器显隐） */
+export type VideoPreset = "ultrafast" | "veryfast" | "medium" | "slow";
+
+/**  重编码画质档：按编码器映射为 `CRF`/`q` 值（`Standard` 复刻各容器的旧默认值） */
+export type VideoQuality = "high" | "standard" | "compact";
+
 /**
  *  首个视频流信息：占位符 `%width%`/`%height%` 与中栏技术行的数据源；
  *  无视频流（如纯音频 MP4）即 `None`，占位符展开时按未知处理
@@ -468,6 +549,13 @@ export type VideoTags = {
 	date: string | null,
 	comment: string | null,
 };
+
+/**  目标容器：七种全量，与输入白名单对齐（线上传 `lowercase`，与前端下拉取值一致） */
+export type VideoTarget = 
+/**  默认目标：兼容性最广 */
+"mp4" | "m4v" | "mov" | "mkv" | "webm" | "avi" | 
+/**  广播录制常见流容器（`mpegts` 复用器，无 `faststart` 概念） */
+"ts";
 
 /* Tauri Specta runtime */
 async function typedError<T, E>(result: Promise<T>): Promise<{ status: "ok"; data: T } | { status: "error"; error: E }> {

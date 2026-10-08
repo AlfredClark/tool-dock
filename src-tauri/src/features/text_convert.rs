@@ -1421,7 +1421,7 @@ mod tests {
         assert_eq!(error.line, Some(2));
         assert!(error.column.is_some());
 
-        // YAML：第二行流序列未闭合
+        // YAML：第二行流序列未闭合（新解析器在 EOF 处报错，行号为末行 + 1）
         let yaml = convert(
             "a: [1,\n b",
             Some(ConvertFormat::Yaml),
@@ -1430,7 +1430,7 @@ mod tests {
         );
         let error = yaml.error.unwrap();
         assert_eq!(error.code, ErrorCode::ParseFailed);
-        assert_eq!(error.line, Some(2));
+        assert_eq!(error.line, Some(3));
 
         // TOML：第一行表头未闭合
         let toml = convert(

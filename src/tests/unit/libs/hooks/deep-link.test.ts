@@ -43,6 +43,8 @@ describe("routeForUrl", () => {
     expect(routeForUrl("tool-dock:///image/resize?from=home")).toBe("/image/resize");
     expect(routeForUrl("tool-dock://video/metadata")).toBe("/video/metadata");
     expect(routeForUrl("tool-dock:///video/metadata?from=home")).toBe("/video/metadata");
+    expect(routeForUrl("tool-dock://video/convert")).toBe("/video/convert");
+    expect(routeForUrl("tool-dock:///video/convert?from=home")).toBe("/video/convert");
   });
 
   it("未知路径与非本协议回落空", () => {

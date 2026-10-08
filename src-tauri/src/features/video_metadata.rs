@@ -15,8 +15,10 @@ use specta::Type;
 
 use crate::features::image_resize::{ExpandDropOutcome, OverwritePolicy};
 
-/// 支持的视频扩展名：与文件对话框过滤器同源（对话框接线时复用）
-pub const SUPPORTED_VIDEO_EXTENSIONS: &[&str] = &["mp4", "m4v", "mov", "mkv", "webm", "avi"];
+/// 支持的视频扩展名：与文件对话框过滤器同源（对话框接线时复用）。
+/// `ts` 读与转码全支持；写入为尽力而为：`mpegts` 无封面概念（见 `cover_container`，与 `AVI` 同按跳过处理），
+/// 标签复用器支持字段少，部分播放器不可见。
+pub const SUPPORTED_VIDEO_EXTENSIONS: &[&str] = &["mp4", "m4v", "mov", "mkv", "webm", "avi", "ts"];
 
 /// 无后缀封面名的尝试后缀（按序首个存在即用；显式后缀不在此限，见 `COVER_IMAGE_EXTENSIONS`）
 const COVER_PROBE_EXTENSIONS: &[&str] = &["jpg", "jpeg", "png"];
@@ -657,7 +659,7 @@ enum CoverContainer {
     Mkv,
 }
 
-/// 按输入扩展名判定封面容器：`None` 即无封面概念（AVI 等），嵌入/清除均按跳过或无操作处理
+/// 按输入扩展名判定封面容器：`None` 即无封面概念（AVI/TS 等），嵌入/清除均按跳过或无操作处理
 fn cover_container(input: &str) -> Option<CoverContainer> {
     match extension_of(input).as_str() {
         "mp4" | "m4v" | "mov" => Some(CoverContainer::Mp4),
@@ -1163,7 +1165,7 @@ mod tests {
 
     #[test]
     fn supported_extensions_cover_target_containers() {
-        for extension in ["mp4", "m4v", "mov", "mkv", "webm", "avi"] {
+        for extension in ["mp4", "m4v", "mov", "mkv", "webm", "avi", "ts"] {
             assert!(SUPPORTED_VIDEO_EXTENSIONS.contains(&extension));
         }
     }
@@ -1303,6 +1305,9 @@ mod tests {
         assert_eq!(cover_container("a.mkv"), Some(CoverContainer::Mkv));
         assert_eq!(cover_container("a.webm"), Some(CoverContainer::Mkv));
         assert_eq!(cover_container("a.avi"), None);
+        // ts 无封面概念，与 avi 同按跳过处理
+        assert_eq!(cover_container("a.ts"), None);
+        assert_eq!(cover_container("a.TS"), None);
     }
 
     #[test]

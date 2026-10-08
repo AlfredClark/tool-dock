@@ -46,6 +46,16 @@ pub enum FfmpegOrigin {
     System,
 }
 
+/// 硬件加速器：前端“硬件加速”下拉的数据源；`Cpu` 为软件兜底不下发，探测只返回真实硬加速项。
+/// 第一批仅 `Nvenc`（QSV/AMF/VideoToolbox 留扩展位，加变体即扩展探测与组装）。
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "lowercase")]
+pub enum Accelerator {
+    #[default]
+    Cpu,
+    Nvenc,
+}
+
 /// 引擎状态：前端状态卡的唯一数据源；不可用时版本与来源均为 `None`
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 pub struct FfmpegStatus {
@@ -58,6 +68,8 @@ pub struct FfmpegStatus {
     /// 当前二进制路径（排障展示用；托管即托管目录下，系统即 `PATH` 命中）
     pub ffmpeg_path: Option<String>,
     pub ffprobe_path: Option<String>,
+    /// 本机可用的硬加速项（探测失败即空，前端隐藏加速入口，不阻断主流程）
+    pub accelerators: Vec<Accelerator>,
 }
 
 /// 解析到的可用二进制：调用方直接拿路径调 `std::process`
@@ -183,6 +195,7 @@ pub fn query_status(app: &tauri::AppHandle) -> FfmpegStatus {
             pinned_version: pinned,
             ffmpeg_path: resolved.ffmpeg.to_str().map(str::to_string),
             ffprobe_path: resolved.ffprobe.to_str().map(str::to_string),
+            accelerators: probe_accelerators(&resolved.ffmpeg),
         },
         Err(_) => FfmpegStatus {
             available: false,
@@ -192,7 +205,47 @@ pub fn query_status(app: &tauri::AppHandle) -> FfmpegStatus {
             pinned_version: pinned,
             ffmpeg_path: None,
             ffprobe_path: None,
+            accelerators: Vec::new(),
         },
+    }
+}
+
+/// 探测可用加速器：跑 `ffmpeg -encoders` 解析；子进程失败即空列表（不阻断状态主流程）。
+/// 注意列表有不等于真能用（残留驱动但无卡），可用性由转码时的硬编失败回 CPU 保证
+fn probe_accelerators(ffmpeg: &Path) -> Vec<Accelerator> {
+    let output = std::process::Command::new(ffmpeg)
+        .args(["-hide_banner", "-encoders"])
+        .output();
+    output.map_or_else(
+        |_| Vec::new(),
+        |out| {
+            if out.status.success() {
+                detect_accelerators(&String::from_utf8_lossy(&out.stdout))
+            } else {
+                Vec::new()
+            }
+        },
+    )
+}
+
+/// 解析 `-encoders` 输出：第二列命中 `h264_nvenc` 即有 NVENC；
+/// macOS 直接过滤（无 N 卡驱动，防御性门禁）
+pub fn detect_accelerators(encoders_stdout: &str) -> Vec<Accelerator> {
+    #[cfg(target_os = "macos")]
+    {
+        let _ = encoders_stdout;
+        return Vec::new();
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let has_nvenc = encoders_stdout
+            .lines()
+            .filter_map(|line| line.split_whitespace().nth(1))
+            .any(|name| name == "h264_nvenc");
+        if has_nvenc {
+            return vec![Accelerator::Nvenc];
+        }
+        Vec::new()
     }
 }
 
@@ -874,6 +927,27 @@ mod tests {
             assert!(resolve_with(None, &[system]).is_err());
             assert!(resolve_with(None, &[]).is_err());
             let _ = std::fs::remove_dir_all(&root);
+        }
+
+        // macOS 无 N 卡驱动，解析恒为空（门禁在实现侧，此处只锁非 mac 行为）
+        #[cfg(not(target_os = "macos"))]
+        #[test]
+        fn detect_accelerators_hits_nvenc_by_exact_name() {
+            // 行首 `V....D` + 第二列精确命中才认（前缀/注释里的 `nvenc` 不算）
+            let listing = "Encoders:\n V....D libx264 libx264 H.264\n V....D h264_nvenc NVIDIA NVENC H.264\n V....D hevc_nvenc NVIDIA NVENC hevc\n";
+            assert_eq!(detect_accelerators(listing), vec![Accelerator::Nvenc]);
+        }
+
+        #[test]
+        fn detect_accelerators_empty_without_hw_encoders() {
+            let listing =
+                "Encoders:\n V....D libx264 libx264 H.264\n V....D libvpx-vp9 libvpx VP9\n";
+            assert_eq!(detect_accelerators(listing), []);
+            assert_eq!(detect_accelerators(""), []);
+            assert_eq!(
+                detect_accelerators("Encoders:\n V....D my_h264_nvenc_clone fake\n"),
+                []
+            );
         }
     }
 }
