@@ -106,7 +106,7 @@
     {:else}
       <div
         role="list"
-        class={cn("flex flex-col gap-1.5 p-2")}
+        class={cn("flex flex-col gap-1 p-1.5")}
         ondragover={handleContainerDragOver}
         ondrop={handleContainerDrop}
       >

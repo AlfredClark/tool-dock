@@ -1,5 +1,5 @@
 <script lang="ts">
-  // 单条规则参数卡：头部（左拖放手柄 + 启用开关 + 序号类型名 + 右删除）+ 按类型分支的参数区。
+  // 单条规则参数卡：头部（左夹点 + 标题 + 右电源/删除）+ 参数区（标签在上，双列网格）。
   // 纯展示组件：参数编辑整体回写 `onRuleChange`（仿 `resize-params` 模式），非法参数标红但不拦截。
   // 排序走 HTML5 拖放：仅手柄可拖，卡片根负责悬停定位与放置，插入线由 panel 态驱动。
   import GripVerticalIcon from "@lucide/svelte/icons/grip-vertical";
@@ -10,7 +10,6 @@
   import { Button } from "$components/shadcn-svelte/button";
   import { Card, CardContent } from "$components/shadcn-svelte/card";
   import { Input } from "$components/shadcn-svelte/input";
-  import { Label } from "$components/shadcn-svelte/label";
   import {
     Select,
     SelectContent,
@@ -21,6 +20,7 @@
   import { Switch } from "$components/shadcn-svelte/switch";
   import { m } from "$libs/i18n/paraglide/messages";
   import { cn } from "$libs/utils/shadcn-svelte";
+  import RuleField from "./rule-field.svelte";
   import { validateRule } from "./renamer-rules";
   import type { RenamerCaseMode, RenamerEdge, RenamerRule } from "./renamer-types";
 
@@ -128,17 +128,17 @@
   role="listitem"
   ondragover={(event) => onCardDragOver(event, rule.id)}
   ondrop={(event) => onCardDrop(event, rule.id)}
-  class={cn("flex shrink-0 flex-col gap-1")}
+  class={cn("flex shrink-0 flex-col gap-0.5")}
 >
   {#if dropBefore}
     <div class={cn("h-0.5 shrink-0 rounded-full bg-primary")} aria-hidden="true"></div>
   {/if}
   <Card class={cn(!rule.enabled && "opacity-60")}>
-    <CardContent class={cn("flex flex-col gap-1.5 p-2")}>
+    <CardContent class={cn("flex flex-col gap-0.5 p-1")}>
       <div class={cn("flex items-center gap-1")}>
         <Button
           variant="ghost"
-          size="icon-sm"
+          size="icon-xs"
           draggable="true"
           ondragstart={(event) => onHandleDragStart(event, rule.id)}
           ondragend={onDragEnd}
@@ -146,17 +146,6 @@
           class={cn("-ml-1 cursor-grab active:cursor-grabbing")}
         >
           <GripVerticalIcon />
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          onclick={() => onRuleChange({ ...rule, enabled: !rule.enabled })}
-          aria-label={m.tool_renamer_rule_enable()}
-          aria-pressed={rule.enabled}
-          title={m.tool_renamer_rule_enable()}
-          class={cn(rule.enabled ? "text-primary" : "text-muted-foreground")}
-        >
-          <PowerIcon />
         </Button>
         <span class={cn("text-xs font-medium tabular-nums")}>#{index + 1}</span>
         <span class={cn("min-w-0 flex-1 truncate text-xs font-medium")}>{kindLabel()}</span>
@@ -171,7 +160,18 @@
         {/if}
         <Button
           variant="ghost"
-          size="icon-sm"
+          size="icon-xs"
+          onclick={() => onRuleChange({ ...rule, enabled: !rule.enabled })}
+          aria-label={m.tool_renamer_rule_enable()}
+          aria-pressed={rule.enabled}
+          title={m.tool_renamer_rule_enable()}
+          class={cn(rule.enabled ? "text-primary" : "text-muted-foreground")}
+        >
+          <PowerIcon />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon-xs"
           onclick={() => onRemove(rule.id)}
           aria-label={m.tool_renamer_rule_remove()}
         >
@@ -180,159 +180,177 @@
       </div>
 
       {#if rule.kind === "affix"}
-        <div class={cn("grid grid-cols-[72px_1fr] items-center gap-x-2 gap-y-1.5")}>
-          <Label class={cn("text-xs")}>{m.tool_renamer_rule_position()}</Label>
-          <Select
-            type="single"
-            value={rule.position}
-            items={edgeItems}
-            onValueChange={handleEdgeChange}
-          >
-            <SelectTrigger class={cn("h-7 w-full")}>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {#each edgeItems as item (item.value)}
-                <SelectItem value={item.value}>{item.label}</SelectItem>
-              {/each}
-            </SelectContent>
-          </Select>
-          <Label class={cn("text-xs")}>{m.tool_renamer_rule_text()}</Label>
-          <Input
-            class={cn("h-7")}
-            value={rule.text}
-            oninput={(event) => onRuleChange({ ...rule, text: event.currentTarget.value })}
-          />
+        <div class={cn("grid grid-cols-2 gap-x-2 gap-y-0.5")}>
+          <RuleField label={m.tool_renamer_rule_position()}>
+            <Select
+              type="single"
+              value={rule.position}
+              items={edgeItems}
+              onValueChange={handleEdgeChange}
+            >
+              <SelectTrigger class={cn("h-7 w-full")}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {#each edgeItems as item (item.value)}
+                  <SelectItem value={item.value}>{item.label}</SelectItem>
+                {/each}
+              </SelectContent>
+            </Select>
+          </RuleField>
+          <RuleField label={m.tool_renamer_rule_text()}>
+            <Input
+              class={cn("h-7")}
+              value={rule.text}
+              oninput={(event) => onRuleChange({ ...rule, text: event.currentTarget.value })}
+            />
+          </RuleField>
         </div>
       {:else if rule.kind === "strip"}
-        <div class={cn("grid grid-cols-[72px_1fr] items-center gap-x-2 gap-y-1.5")}>
-          <Label class={cn("text-xs")}>{m.tool_renamer_rule_position()}</Label>
-          <Select
-            type="single"
-            value={rule.position}
-            items={edgeItems}
-            onValueChange={handleEdgeChange}
-          >
-            <SelectTrigger class={cn("h-7 w-full")}>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {#each edgeItems as item (item.value)}
-                <SelectItem value={item.value}>{item.label}</SelectItem>
-              {/each}
-            </SelectContent>
-          </Select>
-          <Label class={cn("text-xs")}>{m.tool_renamer_rule_count()}</Label>
-          <Input
-            class={cn("h-7")}
-            value={rule.count}
-            inputmode="numeric"
-            oninput={(event) => onRuleChange({ ...rule, count: event.currentTarget.value })}
-          />
+        <div class={cn("grid grid-cols-2 gap-x-2 gap-y-0.5")}>
+          <RuleField label={m.tool_renamer_rule_position()}>
+            <Select
+              type="single"
+              value={rule.position}
+              items={edgeItems}
+              onValueChange={handleEdgeChange}
+            >
+              <SelectTrigger class={cn("h-7 w-full")}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {#each edgeItems as item (item.value)}
+                  <SelectItem value={item.value}>{item.label}</SelectItem>
+                {/each}
+              </SelectContent>
+            </Select>
+          </RuleField>
+          <RuleField label={m.tool_renamer_rule_count()}>
+            <Input
+              class={cn("h-7")}
+              value={rule.count}
+              inputmode="numeric"
+              oninput={(event) => onRuleChange({ ...rule, count: event.currentTarget.value })}
+            />
+          </RuleField>
         </div>
       {:else if rule.kind === "case"}
-        <div class={cn("grid grid-cols-[72px_1fr] items-center gap-x-2 gap-y-1.5")}>
-          <Label class={cn("text-xs")}>{m.tool_renamer_rule_case_mode()}</Label>
-          <Select
-            type="single"
-            value={rule.mode}
-            items={caseItems}
-            onValueChange={handleCaseChange}
-          >
-            <SelectTrigger class={cn("h-7 w-full")}>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {#each caseItems as item (item.value)}
-                <SelectItem value={item.value}>{item.label}</SelectItem>
-              {/each}
-            </SelectContent>
-          </Select>
+        <div class={cn("grid grid-cols-2 gap-x-2 gap-y-0.5")}>
+          <RuleField label={m.tool_renamer_rule_case_mode()}>
+            <Select
+              type="single"
+              value={rule.mode}
+              items={caseItems}
+              onValueChange={handleCaseChange}
+            >
+              <SelectTrigger class={cn("h-7 w-full")}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {#each caseItems as item (item.value)}
+                  <SelectItem value={item.value}>{item.label}</SelectItem>
+                {/each}
+              </SelectContent>
+            </Select>
+          </RuleField>
         </div>
       {:else if rule.kind === "replace"}
-        <div class={cn("grid grid-cols-[72px_1fr] items-center gap-x-2 gap-y-1.5")}>
-          <Label class={cn("text-xs")}>{m.tool_renamer_rule_find()}</Label>
-          <Input
-            class={cn("h-7")}
-            value={rule.find}
-            oninput={(event) => onRuleChange({ ...rule, find: event.currentTarget.value })}
-          />
-          <Label class={cn("text-xs")}>{m.tool_renamer_rule_replacement()}</Label>
-          <Input
-            class={cn("h-7")}
-            value={rule.replacement}
-            oninput={(event) => onRuleChange({ ...rule, replacement: event.currentTarget.value })}
-          />
-          <Label class={cn("text-xs")}>{m.tool_renamer_rule_match_case()}</Label>
-          <Switch
-            checked={rule.matchCase}
-            onCheckedChange={(checked) => onRuleChange({ ...rule, matchCase: checked })}
-          />
+        <div class={cn("grid grid-cols-2 gap-x-2 gap-y-0.5")}>
+          <RuleField label={m.tool_renamer_rule_find()} span>
+            <Input
+              class={cn("h-7")}
+              value={rule.find}
+              oninput={(event) => onRuleChange({ ...rule, find: event.currentTarget.value })}
+            />
+          </RuleField>
+          <RuleField label={m.tool_renamer_rule_replacement()} span>
+            <Input
+              class={cn("h-7")}
+              value={rule.replacement}
+              oninput={(event) => onRuleChange({ ...rule, replacement: event.currentTarget.value })}
+            />
+          </RuleField>
+          <div class={cn("flex items-center gap-1.5")}>
+            <Switch
+              checked={rule.matchCase}
+              onCheckedChange={(checked) => onRuleChange({ ...rule, matchCase: checked })}
+            />
+            <span class={cn("text-xs text-muted-foreground")}
+              >{m.tool_renamer_rule_match_case()}</span
+            >
+          </div>
         </div>
       {:else if rule.kind === "regex"}
-        <div class={cn("grid grid-cols-[72px_1fr] items-center gap-x-2 gap-y-1.5")}>
-          <Label class={cn("text-xs")}>{m.tool_renamer_rule_pattern()}</Label>
-          <Input
-            class={cn("h-7")}
-            value={rule.pattern}
-            spellcheck={false}
-            oninput={(event) => onRuleChange({ ...rule, pattern: event.currentTarget.value })}
-          />
-          <Label class={cn("text-xs")}>{m.tool_renamer_rule_replacement()}</Label>
-          <Input
-            class={cn("h-7")}
-            value={rule.replacement}
-            spellcheck={false}
-            placeholder={m.tool_renamer_replacement_placeholder()}
-            oninput={(event) => onRuleChange({ ...rule, replacement: event.currentTarget.value })}
-          />
+        <div class={cn("grid grid-cols-2 gap-x-2 gap-y-0.5")}>
+          <RuleField label={m.tool_renamer_rule_pattern()} span>
+            <Input
+              class={cn("h-7")}
+              value={rule.pattern}
+              spellcheck={false}
+              placeholder={m.tool_renamer_pattern_placeholder()}
+              oninput={(event) => onRuleChange({ ...rule, pattern: event.currentTarget.value })}
+            />
+          </RuleField>
+          <RuleField label={m.tool_renamer_rule_replacement()} span>
+            <Input
+              class={cn("h-7")}
+              value={rule.replacement}
+              spellcheck={false}
+              placeholder={m.tool_renamer_replacement_placeholder()}
+              oninput={(event) => onRuleChange({ ...rule, replacement: event.currentTarget.value })}
+            />
+          </RuleField>
         </div>
-        <p class={cn("text-xs text-muted-foreground")}>{m.tool_renamer_regex_hint()}</p>
       {:else if rule.kind === "number"}
-        <div class={cn("grid grid-cols-[72px_1fr] items-center gap-x-2 gap-y-1.5")}>
-          <Label class={cn("text-xs")}>{m.tool_renamer_rule_number_start()}</Label>
-          <Input
-            class={cn("h-7")}
-            value={rule.start}
-            inputmode="numeric"
-            oninput={(event) => onRuleChange({ ...rule, start: event.currentTarget.value })}
-          />
-          <Label class={cn("text-xs")}>{m.tool_renamer_rule_number_step()}</Label>
-          <Input
-            class={cn("h-7")}
-            value={rule.step}
-            inputmode="numeric"
-            oninput={(event) => onRuleChange({ ...rule, step: event.currentTarget.value })}
-          />
-          <Label class={cn("text-xs")}>{m.tool_renamer_rule_number_digits()}</Label>
-          <Input
-            class={cn("h-7")}
-            value={rule.digits}
-            inputmode="numeric"
-            oninput={(event) => onRuleChange({ ...rule, digits: event.currentTarget.value })}
-          />
-          <Label class={cn("text-xs")}>{m.tool_renamer_rule_position()}</Label>
-          <Select
-            type="single"
-            value={rule.position}
-            items={edgeItems}
-            onValueChange={handleEdgeChange}
-          >
-            <SelectTrigger class={cn("h-7 w-full")}>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {#each edgeItems as item (item.value)}
-                <SelectItem value={item.value}>{item.label}</SelectItem>
-              {/each}
-            </SelectContent>
-          </Select>
-          <Label class={cn("text-xs")}>{m.tool_renamer_rule_number_separator()}</Label>
-          <Input
-            class={cn("h-7")}
-            value={rule.separator}
-            oninput={(event) => onRuleChange({ ...rule, separator: event.currentTarget.value })}
-          />
+        <div class={cn("grid grid-cols-2 gap-x-2 gap-y-0.5")}>
+          <RuleField label={m.tool_renamer_rule_number_start()}>
+            <Input
+              class={cn("h-7")}
+              value={rule.start}
+              inputmode="numeric"
+              oninput={(event) => onRuleChange({ ...rule, start: event.currentTarget.value })}
+            />
+          </RuleField>
+          <RuleField label={m.tool_renamer_rule_number_step()}>
+            <Input
+              class={cn("h-7")}
+              value={rule.step}
+              inputmode="numeric"
+              oninput={(event) => onRuleChange({ ...rule, step: event.currentTarget.value })}
+            />
+          </RuleField>
+          <RuleField label={m.tool_renamer_rule_number_digits()}>
+            <Input
+              class={cn("h-7")}
+              value={rule.digits}
+              inputmode="numeric"
+              oninput={(event) => onRuleChange({ ...rule, digits: event.currentTarget.value })}
+            />
+          </RuleField>
+          <RuleField label={m.tool_renamer_rule_number_separator()}>
+            <Input
+              class={cn("h-7")}
+              value={rule.separator}
+              oninput={(event) => onRuleChange({ ...rule, separator: event.currentTarget.value })}
+            />
+          </RuleField>
+          <RuleField label={m.tool_renamer_rule_position()}>
+            <Select
+              type="single"
+              value={rule.position}
+              items={edgeItems}
+              onValueChange={handleEdgeChange}
+            >
+              <SelectTrigger class={cn("h-7 w-full")}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {#each edgeItems as item (item.value)}
+                  <SelectItem value={item.value}>{item.label}</SelectItem>
+                {/each}
+              </SelectContent>
+            </Select>
+          </RuleField>
         </div>
       {:else}
         <p class={cn("text-xs text-muted-foreground")}>{m.tool_renamer_rule_normalize_hint()}</p>

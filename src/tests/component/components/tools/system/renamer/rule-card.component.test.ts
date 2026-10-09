@@ -96,6 +96,15 @@ describe("规则参数卡", () => {
     );
   });
 
+  it("正则卡片提示进 placeholder，无独立提示行", () => {
+    renderCard(createRule("regex"));
+
+    expect(screen.getByPlaceholderText("e.g. IMG_(\\d+)")).not.toBeNull();
+    expect(screen.getByPlaceholderText("e.g. photo-$1 ($1/$<name>/$&)")).not.toBeNull();
+    // 旧 hint 行已删除（英文 hint 含 "for full match"）
+    expect(screen.queryByText(/for full match/)).toBeNull();
+  });
+
   it("非法正则显示错误徽章", () => {
     renderCard({ ...createRule("regex"), pattern: "([a-z" });
 
