@@ -36,7 +36,7 @@
     onClear: () => void;
     /** 批量汇总：处理完成后常驻底部，列表变更即失效（`null` 不展示） */
     summary: VideoConvertSummary | null;
-    /** 处理中标志：禁用重试按钮 */
+    /** 处理中标志：锁定增删改与重试（选中浏览不受影响） */
     processing: boolean;
     /** 重试失败项回调（失败项重入队列，零后端改动） */
     onRetry: () => void;
@@ -100,12 +100,18 @@
       {`${m.tool_video_list_title()} · ${m.tool_video_list_count({ count: items.length })}`}
     </span>
     <div class={cn("flex items-center gap-1")}>
-      <Button variant="ghost" size="sm" onclick={onAdd}>
+      <Button variant="ghost" size="sm" disabled={processing} onclick={onAdd}>
         <PlusIcon />
         {m.tool_video_list_add()}
       </Button>
       {#if items.length > 0}
-        <Button variant="ghost" size="sm" onclick={onClear} aria-label={m.tool_video_list_clear()}>
+        <Button
+          variant="ghost"
+          size="sm"
+          disabled={processing}
+          onclick={onClear}
+          aria-label={m.tool_video_list_clear()}
+        >
           <Trash2Icon />
         </Button>
       {/if}
@@ -179,6 +185,7 @@
               <Button
                 variant="ghost"
                 size="icon-sm"
+                disabled={processing}
                 aria-label={m.tool_video_list_remove()}
                 onclick={(event) => {
                   event.stopPropagation();

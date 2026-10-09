@@ -20,7 +20,7 @@ if (typeof ResizeObserver === "undefined") {
 
 const getFfmpegStatusMock = vi.hoisted(() => vi.fn());
 const getVideoDirMock = vi.hoisted(() => vi.fn());
-const readVideoMetadataMock = vi.hoisted(() => vi.fn());
+const readVideoBatchMock = vi.hoisted(() => vi.fn());
 const getVideoThumbnailMock = vi.hoisted(() => vi.fn());
 const expandDroppedVideoPathsMock = vi.hoisted(() => vi.fn());
 const applyVideoMetadataMock = vi.hoisted(() => vi.fn());
@@ -33,7 +33,7 @@ vi.mock("$libs/commands", () => ({
   default: {
     getFfmpegStatus: getFfmpegStatusMock,
     getVideoDir: getVideoDirMock,
-    readVideoMetadata: readVideoMetadataMock,
+    readVideoBatch: readVideoBatchMock,
     getVideoThumbnail: getVideoThumbnailMock,
     expandDroppedVideoPaths: expandDroppedVideoPathsMock,
     applyVideoMetadata: applyVideoMetadataMock,
@@ -92,9 +92,25 @@ function stubDesktopBasics(
     result: () => Promise.resolve({ status: "ok", data: "/vids" }),
     failed: () => ({ result: () => Promise.resolve({ status: "ok", data: "/vids" }) }),
   }));
-  readVideoMetadataMock.mockImplementation(() => ({
-    result: () => Promise.resolve({ status: "ok", data: VIDEO_INFO }),
-    failed: () => ({ result: () => Promise.resolve({ status: "ok", data: VIDEO_INFO }) }),
+  readVideoBatchMock.mockImplementation((paths: string[]) => ({
+    result: () =>
+      Promise.resolve({
+        status: "ok",
+        data: paths.map((path) => ({ path, ok: true, info: VIDEO_INFO, thumb: "", error: null })),
+      }),
+    failed: () => ({
+      result: () =>
+        Promise.resolve({
+          status: "ok",
+          data: paths.map((path) => ({
+            path,
+            ok: true,
+            info: VIDEO_INFO,
+            thumb: "",
+            error: null,
+          })),
+        }),
+    }),
   }));
   getVideoThumbnailMock.mockImplementation(() => ({
     result: () => Promise.resolve({ status: "ok", data: "" }),
@@ -151,6 +167,56 @@ describe("视频元数据三栏", () => {
     const banner = await screen.findByText(`${m.tool_ffmpeg_missing()} →`);
     await user.click(banner);
     expect(screen.getByRole("button", { name: m.tool_ffmpeg_download() })).not.toBeNull();
+  });
+
+  it("载入中预览与信息区显示加载态，不误显示无标签", async () => {
+    const user = userEvent.setup();
+    openDialogMock.mockResolvedValue(["/v/a.mp4"]);
+    readVideoBatchMock.mockImplementationOnce(() => ({
+      failed() {
+        return this;
+      },
+      result() {
+        return new Promise(() => {}) as Promise<never>;
+      },
+    }));
+    render(MetadataWorkspace);
+
+    await user.click(await screen.findByRole("button", { name: m.tool_video_list_add() }));
+    expect(await screen.findByText("a.mp4")).not.toBeNull();
+    // 预览骨架 + 信息区各一处加载文案，不误显示“不可读”
+    expect(screen.getAllByText("Loading preview…")).toHaveLength(2);
+    expect(screen.queryByText("Unreadable")).toBeNull();
+  });
+
+  it("处理中锁定列表增删改", async () => {
+    const user = userEvent.setup();
+    openDialogMock.mockResolvedValue(["/v/a.mp4"]);
+    // 写入永不返回：卡在处理中
+    applyVideoMetadataMock.mockImplementation(() => ({
+      failed() {
+        return this;
+      },
+      result() {
+        return new Promise(() => {}) as Promise<never>;
+      },
+    }));
+    render(MetadataWorkspace);
+
+    await user.click(await screen.findByRole("button", { name: m.tool_video_list_add() }));
+    expect(await screen.findByText("01:00 · 1920×1080 · 1000 B")).not.toBeNull();
+    await user.click(screen.getByRole("button", { name: m.tool_video_start() }));
+
+    // 处理中：添加/清空/单项移除全禁用
+    expect(
+      screen.getByRole("button", { name: m.tool_video_list_add() }).hasAttribute("disabled"),
+    ).toBe(true);
+    expect(
+      screen.getByRole("button", { name: m.tool_video_list_clear() }).hasAttribute("disabled"),
+    ).toBe(true);
+    for (const remove of screen.getAllByRole("button", { name: m.tool_video_list_remove() })) {
+      expect(remove.hasAttribute("disabled")).toBe(true);
+    }
   });
 
   it("完整链路：添加→读元信息→模板展开→处理完成", async () => {

@@ -16,6 +16,18 @@
   }
 
   let { item, estimated, targetIgnored }: Props = $props();
+
+  /** 加载态：条目批量载入中，或大图在途且暂无任何图可显（此时显示“不可读”属误导） */
+  const showLoading = $derived(
+    item !== null &&
+      (item.status === "loading" ||
+        (item.detailLoading && item.detailUrl === "" && item.previewUrl === "")),
+  );
+
+  /** 当前展示图：大图优先，小图兜底（加载态下不消费，骨架占位） */
+  const imageSrc = $derived(
+    item !== null && item.detailUrl !== "" ? item.detailUrl : (item?.previewUrl ?? ""),
+  );
 </script>
 
 <section
@@ -42,14 +54,24 @@
     <div
       class={cn("flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-muted/40 p-4")}
     >
-      {#if item.previewUrl !== ""}
+      {#if showLoading}
+        <!-- 批量载入中：骨架占位 + 文案，不再误显示“不可读” -->
+        <div class={cn("flex flex-col items-center justify-center gap-2")}>
+          <span class={cn("h-16 w-16 animate-pulse rounded border bg-muted/60")} aria-hidden="true"
+          ></span>
+          <p class={cn("text-center text-sm text-muted-foreground")}>
+            {m.tool_preview_loading()}
+          </p>
+        </div>
+      {:else if imageSrc !== ""}
         <img
-          src={item.previewUrl}
+          src={imageSrc}
           alt={item.name}
+          decoding="async"
           class={cn("max-h-full max-w-full rounded border object-contain shadow-sm")}
         />
       {:else}
-        <!-- 缩略图失败兜底：元信息仍在下方展示，此处仅提示无图（`loading` 态短暂经过） -->
+        <!-- 缩略图失败兜底：元信息仍在下方展示，此处仅提示无图 -->
         <p class={cn("text-center text-sm text-muted-foreground")}>
           {m.tool_resize_list_invalid()}
         </p>
@@ -61,7 +83,10 @@
         "text-xs text-muted-foreground tabular-nums",
       )}
     >
-      {#if item.info}
+      {#if item.status === "loading"}
+        <span>{m.tool_preview_loading()}</span>
+      {/if}
+      {#if item.status !== "loading" && item.info}
         {@const original = `${item.info.width}×${item.info.height}`}
         <span>{original}</span>
         <span>{item.info.format.toUpperCase()}</span>

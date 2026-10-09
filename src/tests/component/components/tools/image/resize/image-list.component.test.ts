@@ -18,6 +18,9 @@ function makeItem(partial: Partial<ResizeImageItem> & { id: string }): ResizeIma
     path: `/tmp/${partial.id}.png`,
     name: `${partial.id}.png`,
     previewUrl: "data:,",
+    detailUrl: "",
+    detailLoading: false,
+    detailFailed: false,
     revokePreview: false,
     info: { width: 64, height: 48, format: "png", file_size: 1024 },
     errorDetail: null,
@@ -150,5 +153,37 @@ describe("图片列表", () => {
     expect(screen.getByRole("button", { name: "Retry failed" }).hasAttribute("disabled")).toBe(
       true,
     );
+  });
+
+  it("处理中锁定添加/清空/单项移除，选中不受影响", async () => {
+    const user = userEvent.setup();
+    const onSelect = vi.fn();
+    const onRemove = vi.fn();
+    const onAdd = vi.fn();
+    const onClear = vi.fn();
+    render(ImageList, {
+      props: {
+        items: [makeItem({ id: "a" })],
+        selectedId: null,
+        onSelect,
+        onRemove,
+        onAdd,
+        onClear,
+        summary: null,
+        processing: true,
+        onRetry: vi.fn(),
+      },
+    });
+
+    expect(screen.getByRole("button", { name: "Add images" }).hasAttribute("disabled")).toBe(true);
+    expect(screen.getByRole("button", { name: "Clear" }).hasAttribute("disabled")).toBe(true);
+    expect(screen.getByRole("button", { name: "Remove" }).hasAttribute("disabled")).toBe(true);
+
+    // 禁用态下点击无回调；选中浏览仍可用
+    await user.click(screen.getByText("a.png"));
+    expect(onSelect).toHaveBeenCalledWith("a");
+    expect(onAdd).not.toHaveBeenCalled();
+    expect(onClear).not.toHaveBeenCalled();
+    expect(onRemove).not.toHaveBeenCalled();
   });
 });

@@ -109,7 +109,10 @@ export function resetForEncoder(
 export type VideoConvertItemStatus =
   "loading" | "ready" | "invalid" | "done" | "failed" | "skipped";
 
-/** 列表项：`previewUrl` 为后端海报帧 `data:` URL（卸载时无需释放，非 `objectURL`） */
+/**
+ * 列表项：`previewUrl` 为批量 96px 小海报（JPEG `data:` URL），`detailUrl` 为选中后懒加载的 768px
+ * 大海报
+ */
 export interface VideoConvertItem {
   /** 稳定键：桌面端用路径，浏览器用 `browser:<name>:<size>` 合成 */
   id: string;
@@ -117,8 +120,14 @@ export interface VideoConvertItem {
   path: string;
   /** 显示名：路径取 basename，浏览器取 File 名 */
   name: string;
-  /** 海报地址：后端抽帧 `data:` URL；抽帧失败时为空串 */
+  /** 小海报：后端批量抽帧 `data:` URL；抽帧失败时为空串 */
   previewUrl: string;
+  /** 大海报：选中项按需取 768px，空即未载（`detailLoading` 为真即在途） */
+  detailUrl: string;
+  /** 大海报在途：中栏先显小图，不阻塞开始按钮 */
+  detailLoading: boolean;
+  /** 大海报已失败：取回空或传输失败即终态，不再重试（防 `$effect` 空转刷命令） */
+  detailFailed: boolean;
   /** 元信息：`invalid` 时为 `null` */
   info: VideoFileMetadata | null;
   /** 不可读/失败原因（英文诊断原文，前端展示通用文案 + 原文补充） */

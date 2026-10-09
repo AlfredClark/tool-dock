@@ -36,6 +36,12 @@ export const commands = {
 	 */
 	getVideoThumbnail: (path: string, maxSide: number, seekSeconds: number | null) => typedError<string, CommandError>(__TAURI_INVOKE("get_video_thumbnail", { path, maxSide, seekSeconds })),
 	/**
+	 *  批量读取元信息 + 列表小海报：一次调用返回整块结果（顺序与入参一致），单项失败
+	 *  装进条目不中断其余。前端按 200 切块调用，后端文件间 4 线程并发；768 大海报仍走
+	 *  单文件命令按选中项懒加载。
+	 */
+	readVideoBatch: (paths: string[], listSide: number) => typedError<VideoBatchItem[], CommandError>(__TAURI_INVOKE("read_video_batch", { paths, listSide })),
+	/**
 	 *  写入单文件标签；输出路径由后端按输出目录 + 原名计算，单文件失败装进
 	 *  `VideoApplyOutcome` 跳过继续（前端逐项调用以驱动进度）
 	 */
@@ -71,13 +77,20 @@ export const commands = {
 	/**
 	 *  读取单张图片元信息（尺寸/格式/大小）；路径来自拖放或对话框，后端二次校验。
 	 *  文件打不开抛错走 `CommandError`，前端按单张标红处理，不中断批量。
+	 *  同步解码经 `spawn_blocking` 隔离：批量载入时多文件并发，不饿死异步运行时。
 	 */
 	readImageInfo: (path: string) => typedError<ImageInfo, CommandError>(__TAURI_INVOKE("read_image_info", { path })),
 	/**
 	 *  读取预览缩略图：等比压到 `max_side` 内，以 `data:` URL 返回（前端 `<img>` 直显）。
 	 *  `asset` 协议需配 scope 才放行本地路径，回 data URL 可保持最小授权。
+	 *  大图懒加载入口（列表走批量 96px，此处按需取 768），同样隔离到阻塞线程。
 	 */
 	getImageThumbnail: (path: string, maxSide: number) => typedError<string, CommandError>(__TAURI_INVOKE("get_image_thumbnail", { path, maxSide })),
+	/**
+	 *  批量读取元信息 + 列表小图：一次调用返回整块结果（顺序与入参一致），单项失败
+	 *  装进条目不中断其余。前端按 200 切块调用，后端文件间 4 线程并发。
+	 */
+	readImageBatch: (paths: string[], listSide: number) => typedError<ImageBatchItem[], CommandError>(__TAURI_INVOKE("read_image_batch", { paths, listSide })),
 	/**
 	 *  展开拖放路径：文件直通 + 文件夹展平为图片 + 首个文件夹的 `resized/` 建议。
 	 *  枚举失败抛错走 `CommandError`，前端回落原路径逐张处理。
@@ -331,6 +344,18 @@ export type FfmpegStatus = {
  */
 export type FitMode = "stretch" | "contain" | "cover" | "pad";
 
+/**
+ *  批量单项结果：`ok` 为真读 `info`（`thumb` 缺失仅空预览，不降级条目），为假读 `error`；
+ *  顺序与入参一一对应，前端按下标合并无需再对齐
+ */
+export type ImageBatchItem = {
+	path: string,
+	ok: boolean,
+	info: ImageInfo | null,
+	thumb: string | null,
+	error: string | null,
+};
+
 /**  支持的输入图片格式：与文件对话框过滤器、扩展名白名单三处同源（见 `SUPPORTED_EXTENSIONS`） */
 export type ImageFormat = "jpeg" | "png" | "webp" | "bmp" | "tiff" | "gif";
 
@@ -452,6 +477,18 @@ export type VideoApplyOutcome = {
 	output: string | null,
 	error: VideoMetadataError | null,
 	cover: CoverResult,
+};
+
+/**
+ *  批量单项结果：`ok` 为真读 `info`（`thumb` 缺失仅空预览，不降级条目），为假读 `error`；
+ *  顺序与入参一一对应，前端按下标合并无需再对齐
+ */
+export type VideoBatchItem = {
+	path: string,
+	ok: boolean,
+	info: VideoFileMetadata | null,
+	thumb: string | null,
+	error: string | null,
 };
 
 /**  业务错误体：扁平结构便于 `specta` 导出，前端按 `code` 分支（与视频元数据侧同约定） */

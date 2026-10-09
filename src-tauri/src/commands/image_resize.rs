@@ -3,27 +3,51 @@
 
 use crate::cores::types::{CommandError, CommandResult};
 use crate::features::image_resize::{
-    ExpandDropOutcome, ImageInfo, ResizeOptions, ResizeSingleOutcome,
+    ExpandDropOutcome, ImageBatchItem, ImageInfo, ResizeOptions, ResizeSingleOutcome,
 };
 
 /// 读取单张图片元信息（尺寸/格式/大小）；路径来自拖放或对话框，后端二次校验。
 /// 文件打不开抛错走 `CommandError`，前端按单张标红处理，不中断批量。
+/// 同步解码经 `spawn_blocking` 隔离：批量载入时多文件并发，不饿死异步运行时。
 #[tauri::command]
 #[specta::specta]
 #[allow(clippy::needless_pass_by_value)]
-pub fn read_image_info(path: String) -> CommandResult<ImageInfo> {
-    Ok(crate::features::image_resize::read_image_info(&path)?)
+pub async fn read_image_info(path: String) -> CommandResult<ImageInfo> {
+    Ok(tauri::async_runtime::spawn_blocking(move || {
+        crate::features::image_resize::read_image_info(&path)
+    })
+    .await
+    .map_err(|err| CommandError::Internal(format!("image info task failed: {err}")))??)
 }
 
 /// 读取预览缩略图：等比压到 `max_side` 内，以 `data:` URL 返回（前端 `<img>` 直显）。
 /// `asset` 协议需配 scope 才放行本地路径，回 data URL 可保持最小授权。
+/// 大图懒加载入口（列表走批量 96px，此处按需取 768），同样隔离到阻塞线程。
 #[tauri::command]
 #[specta::specta]
 #[allow(clippy::needless_pass_by_value)]
-pub fn get_image_thumbnail(path: String, max_side: u32) -> CommandResult<String> {
-    Ok(crate::features::image_resize::read_image_thumbnail(
-        &path, max_side,
-    )?)
+pub async fn get_image_thumbnail(path: String, max_side: u32) -> CommandResult<String> {
+    Ok(tauri::async_runtime::spawn_blocking(move || {
+        crate::features::image_resize::read_image_thumbnail(&path, max_side)
+    })
+    .await
+    .map_err(|err| CommandError::Internal(format!("image thumbnail task failed: {err}")))??)
+}
+
+/// 批量读取元信息 + 列表小图：一次调用返回整块结果（顺序与入参一致），单项失败
+/// 装进条目不中断其余。前端按 200 切块调用，后端文件间 4 线程并发。
+#[tauri::command]
+#[specta::specta]
+#[allow(clippy::needless_pass_by_value)]
+pub async fn read_image_batch(
+    paths: Vec<String>,
+    list_side: u32,
+) -> CommandResult<Vec<ImageBatchItem>> {
+    Ok(tauri::async_runtime::spawn_blocking(move || {
+        crate::features::image_resize::read_image_batch(&paths, list_side)
+    })
+    .await
+    .map_err(|err| CommandError::Internal(format!("image batch task failed: {err}")))??)
 }
 /// 展开拖放路径：文件直通 + 文件夹展平为图片 + 首个文件夹的 `resized/` 建议。
 /// 枚举失败抛错走 `CommandError`，前端回落原路径逐张处理。

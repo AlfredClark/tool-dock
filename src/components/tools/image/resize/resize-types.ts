@@ -15,7 +15,7 @@ export type ResizeModeKind = "box" | "percent" | "exact";
 /** 列表项状态：读取中/就绪/不可读/已完成/失败/已跳过（批量处理进度由 workspace 进度态表达） */
 export type ResizeItemStatus = "loading" | "ready" | "invalid" | "done" | "failed" | "skipped";
 
-/** 列表项：`previewUrl` 桌面端为后端缩略图 `data:` URL，浏览器为 `objectURL`（卸载时释放） */
+/** 列表项：`previewUrl` 为批量 96px 列表小图（`data:` URL），`detailUrl` 为选中后懒加载的 768px 大图 */
 export interface ResizeImageItem {
   /** 稳定键：桌面端用路径，浏览器用 `blob:<name>:<size>` 合成 */
   id: string;
@@ -23,8 +23,14 @@ export interface ResizeImageItem {
   path: string;
   /** 显示名：路径取 basename，浏览器取 File 名 */
   name: string;
-  /** 预览地址：桌面端缩略图 `data:` URL，浏览器 `objectURL`；缩略图失败时为空串 */
+  /** 列表小图：桌面端批量 `data:` URL，浏览器 `objectURL`；载入中/失败时为空串 */
   previewUrl: string;
+  /** 大图：选中项按需取 768px，空即未载（`detailLoading` 为真即在途） */
+  detailUrl: string;
+  /** 大图在途：中栏先显小图，不阻塞开始按钮 */
+  detailLoading: boolean;
+  /** 大图已失败：取回空或传输失败即终态，不再重试（防 `$effect` 空转刷命令） */
+  detailFailed: boolean;
   /** 是否需要释放 `previewUrl`（仅 `objectURL` 为真） */
   revokePreview: boolean;
   /** 元信息：`invalid` 时为 `null` */

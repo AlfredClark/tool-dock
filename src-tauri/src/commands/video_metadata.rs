@@ -4,7 +4,9 @@
 use crate::cores::ffmpeg;
 use crate::cores::types::{CommandError, CommandResult};
 use crate::features::image_resize::ExpandDropOutcome;
-use crate::features::video_metadata::{VideoApplyOptions, VideoApplyOutcome, VideoFileMetadata};
+use crate::features::video_metadata::{
+    VideoApplyOptions, VideoApplyOutcome, VideoBatchItem, VideoFileMetadata,
+};
 
 /// 子线程执行同步阻塞活（进程拉起 + 流式拷贝），不饿死异步运行时（同 `resize_image`）
 async fn run_blocking<T>(
@@ -71,6 +73,25 @@ pub async fn apply_video_metadata(
     })
     .await
     .map_err(|err| CommandError::Internal(format!("video metadata task failed: {err}")))
+}
+
+/// 批量读取元信息 + 列表小海报：一次调用返回整块结果（顺序与入参一致），单项失败
+/// 装进条目不中断其余。前端按 200 切块调用，后端文件间 4 线程并发；768 大海报仍走
+/// 单文件命令按选中项懒加载。
+#[tauri::command]
+#[specta::specta]
+#[allow(clippy::needless_pass_by_value)]
+pub async fn read_video_batch(
+    app: tauri::AppHandle,
+    paths: Vec<String>,
+    list_side: u32,
+) -> CommandResult<Vec<VideoBatchItem>> {
+    let bins = ffmpeg::resolve_binaries(&app)?;
+    let (ffmpeg, ffprobe) = (bins.ffmpeg, bins.ffprobe);
+    run_blocking(move || {
+        crate::features::video_metadata::read_video_batch(&ffmpeg, &ffprobe, &paths, list_side)
+    })
+    .await
 }
 
 /// 展开拖放路径：文件直通 + 文件夹展平为视频 + 首个文件夹的 `edited/` 建议。

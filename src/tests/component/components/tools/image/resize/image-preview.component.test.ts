@@ -20,6 +20,9 @@ describe("图片预览", () => {
       path: "/tmp/a.png",
       name: "a.png",
       previewUrl: "data:,",
+      detailUrl: "",
+      detailLoading: false,
+      detailFailed: false,
       revokePreview: false,
       info: { width: 200, height: 100, format: "jpeg", file_size: 2048 },
       errorDetail: null,
@@ -37,12 +40,39 @@ describe("图片预览", () => {
     expect(screen.getByText("Estimated 100×50")).not.toBeNull();
   });
 
+  it("载入中显示骨架与加载文案，不误显示不可读", () => {
+    const item: ResizeImageItem = {
+      id: "/tmp/a.png",
+      path: "/tmp/a.png",
+      name: "a.png",
+      previewUrl: "",
+      detailUrl: "",
+      detailLoading: false,
+      detailFailed: false,
+      revokePreview: false,
+      info: null,
+      errorDetail: null,
+      status: "loading",
+      output: null,
+      outputSize: null,
+      targetMet: null,
+    };
+    render(ImagePreview, { props: { item, estimated: null, targetIgnored: false } });
+
+    // 预览骨架 + 信息行各一处加载文案
+    expect(screen.getAllByText("Loading preview…")).toHaveLength(2);
+    expect(screen.queryByText("Unreadable")).toBeNull();
+  });
+
   it("目标未达成显示附注", () => {
     const item: ResizeImageItem = {
       id: "/tmp/a.png",
       path: "/tmp/a.png",
       name: "a.png",
       previewUrl: "data:,",
+      detailUrl: "",
+      detailLoading: false,
+      detailFailed: false,
       revokePreview: false,
       info: { width: 200, height: 100, format: "jpeg", file_size: 2048 },
       errorDetail: null,
@@ -63,6 +93,9 @@ describe("图片预览", () => {
       path: "/tmp/a.png",
       name: "a.png",
       previewUrl: "data:,",
+      detailUrl: "",
+      detailLoading: false,
+      detailFailed: false,
       revokePreview: false,
       info: { width: 200, height: 100, format: "png", file_size: 2048 },
       errorDetail: null,

@@ -33,7 +33,17 @@ function okChain<T>(data: T) {
 const commandsMock = vi.hoisted(() => ({
   // 注意：必须同步返回链式对象（`.failed().result()`），不能包 `async`
   // （原生 Promise 没有 `.failed()`，会复现“失败不是函数”的假阳性）
-  readImageInfo: vi.fn(() => okChain({ width: 100, height: 80, format: "png", file_size: 1024 })),
+  readImageBatch: vi.fn((paths: string[]) =>
+    okChain(
+      paths.map((path) => ({
+        path,
+        ok: true,
+        info: { width: 100, height: 80, format: "png", file_size: 1024 },
+        thumb: "data:image/jpeg;base64,AAA",
+        error: null,
+      })),
+    ),
+  ),
   getImageThumbnail: vi.fn(() => okChain("data:image/jpeg;base64,AAA")),
   resizeImage: vi.fn((input: string) =>
     okChain<ResizeSingleOutcome>({
@@ -246,8 +256,8 @@ describe("图片尺寸批量流程", () => {
 
   it("读取中禁用开始按钮", async () => {
     const user = userEvent.setup();
-    // 首个元信息请求永不返回：条目卡在 loading
-    commandsMock.readImageInfo.mockImplementationOnce((() => ({
+    // 批量请求永不返回：条目卡在 loading
+    commandsMock.readImageBatch.mockImplementationOnce((() => ({
       failed() {
         return this;
       },
@@ -264,6 +274,111 @@ describe("图片尺寸批量流程", () => {
 
     // 模式目录齐备，但有条目仍在读取，开始保持禁用
     expect(screen.getByRole("button", { name: "Start" }).hasAttribute("disabled")).toBe(true);
+  });
+
+  it("批量一次取全元信息与小图", async () => {
+    const user = userEvent.setup();
+    render(ResizeWorkspace);
+
+    await user.click(screen.getByRole("button", { name: "Add images" }));
+    expect(await screen.findByText("a.png")).not.toBeNull();
+    expect(await screen.findByText("b.png")).not.toBeNull();
+
+    // 两张图一次批量调用：路径数组 + 96px 小图边长
+    expect(commandsMock.readImageBatch).toHaveBeenCalledTimes(1);
+    expect(commandsMock.readImageBatch).toHaveBeenCalledWith(["/tmp/a.png", "/tmp/b.png"], 96);
+  });
+
+  it("小图失败仍就绪，选中后大图懒加载", async () => {
+    const user = userEvent.setup();
+    // 首张小图缺失：条目照常就绪（仅空预览）
+    commandsMock.readImageBatch.mockImplementationOnce(((paths: string[]) =>
+      okChain(
+        paths.map((path) => ({
+          path,
+          ok: true,
+          info: { width: 100, height: 80, format: "png", file_size: 1024 },
+          thumb: path.endsWith("a.png") ? null : "data:image/jpeg;base64,AAA",
+          error: null,
+        })),
+      )) as never);
+    render(ResizeWorkspace);
+
+    await user.click(screen.getByRole("button", { name: "Add images" }));
+    expect(await screen.findByText("a.png")).not.toBeNull();
+    expect(await screen.findByText("b.png")).not.toBeNull();
+
+    // 选中首张触发大图懒加载（768px 按需取）
+    await waitFor(() => {
+      expect(commandsMock.getImageThumbnail).toHaveBeenCalledWith("/tmp/a.png", 768);
+    });
+  });
+
+  it("整块传输失败按块标红", async () => {
+    const user = userEvent.setup();
+    commandsMock.readImageBatch.mockImplementationOnce((() => ({
+      failed(handler: (failure: unknown) => void) {
+        handler(new Error("ipc down"));
+        return this;
+      },
+      async result() {
+        return { status: "error", error: new Error("ipc down") } as const;
+      },
+    })) as never);
+    render(ResizeWorkspace);
+
+    await user.click(screen.getByRole("button", { name: "Add images" }));
+    expect(await screen.findByText("a.png")).not.toBeNull();
+    // 两张都标不可读（列表 2 徽章 + 中栏空图兜底 1），开始按钮保持禁用
+    expect(await screen.findAllByText("Unreadable")).toHaveLength(3);
+    expect(screen.getByRole("button", { name: "Start" }).hasAttribute("disabled")).toBe(true);
+  });
+
+  it("载入中预览区与信息行显示加载态", async () => {
+    const user = userEvent.setup();
+    commandsMock.readImageBatch.mockImplementationOnce((() => ({
+      failed() {
+        return this;
+      },
+      result() {
+        return new Promise(() => {}) as Promise<never>;
+      },
+    })) as never);
+    render(ResizeWorkspace);
+
+    await user.click(screen.getByRole("button", { name: "Add images" }));
+    expect(await screen.findByText("a.png")).not.toBeNull();
+    // 预览骨架 + 信息行各一处加载文案，不误显示“不可读”
+    expect(screen.getAllByText("Loading preview…")).toHaveLength(2);
+    expect(screen.queryByText("Unreadable")).toBeNull();
+  });
+
+  it("处理中锁定列表增删改", async () => {
+    const user = userEvent.setup();
+    // 单张处理永不返回：卡在处理中
+    commandsMock.resizeImage.mockImplementation((() => ({
+      failed() {
+        return this;
+      },
+      result() {
+        return new Promise(() => {}) as Promise<never>;
+      },
+    })) as never);
+    render(ResizeWorkspace);
+
+    await user.click(screen.getByRole("button", { name: "Add images" }));
+    expect(await screen.findByText("a.png")).not.toBeNull();
+    await user.click(screen.getByRole("button", { name: "Choose…" }));
+    await user.type(screen.getByLabelText("Width"), "50");
+    await user.click(screen.getByRole("button", { name: "Start" }));
+
+    // 处理中：添加/清空/单项移除全禁用，选中浏览仍可用
+    expect(screen.getByRole("button", { name: "Add images" }).hasAttribute("disabled")).toBe(true);
+    expect(screen.getByRole("button", { name: "Clear" }).hasAttribute("disabled")).toBe(true);
+    for (const remove of screen.getAllByRole("button", { name: "Remove" })) {
+      expect(remove.hasAttribute("disabled")).toBe(true);
+    }
+    await user.click(screen.getByText("a.png"));
   });
 
   it("默认输出目录为系统图片目录", async () => {

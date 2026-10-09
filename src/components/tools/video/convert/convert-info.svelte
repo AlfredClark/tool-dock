@@ -32,27 +32,33 @@
     )}
   >
     <div class={cn("flex flex-wrap items-center gap-x-4 gap-y-1 text-muted-foreground")}>
-      {#if item.info?.stream?.width != null && item.info?.stream?.height != null}
-        <span
-          >{m.tool_video_info_resolution()} {item.info.stream.width}×{item.info.stream.height}</span
-        >
+      {#if item.status === "loading"}
+        <!-- 批量载入中：信息未到，不误显示“无视频流” -->
+        <span>{m.tool_preview_loading()}</span>
       {:else}
-        <span>{m.tool_video_info_no_stream()}</span>
-      {/if}
-      {#if item.info?.duration_seconds != null}
-        <span>
-          {m.tool_video_info_duration()}
-          {formatClock(item.info.duration_seconds)}
-        </span>
-      {/if}
-      {#if item.info?.stream?.codec_name}
-        <span>{m.tool_video_info_codec()} {item.info.stream.codec_name}</span>
-      {/if}
-      {#if item.info?.file_size != null}
-        <span>{m.tool_video_info_size()} {formatDownloadSize(item.info.file_size)}</span>
-      {/if}
-      {#if item.info?.format_name}
-        <span>{m.tool_video_info_format()} {item.info.format_name.split(",")[0]}</span>
+        {#if item.info?.stream?.width != null && item.info?.stream?.height != null}
+          <span
+            >{m.tool_video_info_resolution()}
+            {item.info.stream.width}×{item.info.stream.height}</span
+          >
+        {:else}
+          <span>{m.tool_video_info_no_stream()}</span>
+        {/if}
+        {#if item.info?.duration_seconds != null}
+          <span>
+            {m.tool_video_info_duration()}
+            {formatClock(item.info.duration_seconds)}
+          </span>
+        {/if}
+        {#if item.info?.stream?.codec_name}
+          <span>{m.tool_video_info_codec()} {item.info.stream.codec_name}</span>
+        {/if}
+        {#if item.info?.file_size != null}
+          <span>{m.tool_video_info_size()} {formatDownloadSize(item.info.file_size)}</span>
+        {/if}
+        {#if item.info?.format_name}
+          <span>{m.tool_video_info_format()} {item.info.format_name.split(",")[0]}</span>
+        {/if}
       {/if}
     </div>
     <div class={cn("flex min-w-0 items-baseline gap-2")}>

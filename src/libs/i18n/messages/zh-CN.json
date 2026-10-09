@@ -48,6 +48,7 @@
   "tool_video_preview_title": "预览",
   "tool_video_preview_empty": "从左侧选择一个视频预览",
   "tool_video_preview_poster": "海报",
+  "tool_preview_loading": "正在加载预览…",
   "tool_video_info_resolution": "分辨率",
   "tool_video_info_duration": "时长",
   "tool_video_info_codec": "编码",

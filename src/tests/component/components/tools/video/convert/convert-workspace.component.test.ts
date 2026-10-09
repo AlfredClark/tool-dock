@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/svelte";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/svelte";
 import userEvent from "@testing-library/user-event";
 import ConvertWorkspace from "../../../../../../components/tools/video/convert/convert-workspace.svelte";
 import { m } from "$libs/i18n/paraglide/messages";
@@ -20,7 +20,7 @@ if (typeof ResizeObserver === "undefined") {
 
 const getFfmpegStatusMock = vi.hoisted(() => vi.fn());
 const getVideoDirMock = vi.hoisted(() => vi.fn());
-const readVideoMetadataMock = vi.hoisted(() => vi.fn());
+const readVideoBatchMock = vi.hoisted(() => vi.fn());
 const getVideoThumbnailMock = vi.hoisted(() => vi.fn());
 const expandDroppedVideoPathsMock = vi.hoisted(() => vi.fn());
 const convertVideoFormatMock = vi.hoisted(() => vi.fn());
@@ -33,7 +33,7 @@ vi.mock("$libs/commands", () => ({
   default: {
     getFfmpegStatus: getFfmpegStatusMock,
     getVideoDir: getVideoDirMock,
-    readVideoMetadata: readVideoMetadataMock,
+    readVideoBatch: readVideoBatchMock,
     getVideoThumbnail: getVideoThumbnailMock,
     expandDroppedVideoPaths: expandDroppedVideoPathsMock,
     convertVideoFormat: convertVideoFormatMock,
@@ -92,9 +92,25 @@ function stubDesktopBasics(
     result: () => Promise.resolve({ status: "ok", data: "/vids" }),
     failed: () => ({ result: () => Promise.resolve({ status: "ok", data: "/vids" }) }),
   }));
-  readVideoMetadataMock.mockImplementation(() => ({
-    result: () => Promise.resolve({ status: "ok", data: VIDEO_INFO }),
-    failed: () => ({ result: () => Promise.resolve({ status: "ok", data: VIDEO_INFO }) }),
+  readVideoBatchMock.mockImplementation((paths: string[]) => ({
+    result: () =>
+      Promise.resolve({
+        status: "ok",
+        data: paths.map((path) => ({ path, ok: true, info: VIDEO_INFO, thumb: "", error: null })),
+      }),
+    failed: () => ({
+      result: () =>
+        Promise.resolve({
+          status: "ok",
+          data: paths.map((path) => ({
+            path,
+            ok: true,
+            info: VIDEO_INFO,
+            thumb: "",
+            error: null,
+          })),
+        }),
+    }),
   }));
   getVideoThumbnailMock.mockImplementation(() => ({
     result: () => Promise.resolve({ status: "ok", data: "" }),
@@ -186,6 +202,73 @@ describe("视频格式转换三栏", () => {
     ).not.toBeNull();
     // 成功项展示流复制备注
     expect(await screen.findByText(m.tool_video_convert_note_copy())).not.toBeNull();
+  });
+
+  it("大海报取空记终态，不循环重试", async () => {
+    const user = userEvent.setup();
+    openDialogMock.mockResolvedValue(["/v/a.mkv"]);
+    render(ConvertWorkspace);
+
+    await user.click(await screen.findByRole("button", { name: m.tool_video_list_add() }));
+    expect(await screen.findByText("01:00 · 1920×1080 · 1000 B")).not.toBeNull();
+
+    // 空海报（桩回 `""`）只取一次即终态，不会空转刷命令
+    await waitFor(() => {
+      expect(getVideoThumbnailMock).toHaveBeenCalledTimes(1);
+    });
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(getVideoThumbnailMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("载入中预览与信息区显示加载态，不误显示无流", async () => {
+    const user = userEvent.setup();
+    openDialogMock.mockResolvedValue(["/v/a.mkv"]);
+    readVideoBatchMock.mockImplementationOnce(() => ({
+      failed() {
+        return this;
+      },
+      result() {
+        return new Promise(() => {}) as Promise<never>;
+      },
+      // 链式 `.failed().result()` 形状，调用方不消费返回值之外的字段
+    }));
+    render(ConvertWorkspace);
+
+    await user.click(await screen.findByRole("button", { name: m.tool_video_list_add() }));
+    expect(await screen.findByText("a.mkv")).not.toBeNull();
+    // 预览骨架 + 信息行各一处加载文案，不误显示“不可读”与“无视频流”
+    expect(screen.getAllByText("Loading preview…")).toHaveLength(2);
+    expect(screen.queryByText("Unreadable")).toBeNull();
+  });
+
+  it("处理中锁定列表增删改", async () => {
+    const user = userEvent.setup();
+    openDialogMock.mockResolvedValue(["/v/a.mkv"]);
+    // 转换永不返回：卡在处理中
+    convertVideoFormatMock.mockImplementation(() => ({
+      failed() {
+        return this;
+      },
+      result() {
+        return new Promise(() => {}) as Promise<never>;
+      },
+    }));
+    render(ConvertWorkspace);
+
+    await user.click(await screen.findByRole("button", { name: m.tool_video_list_add() }));
+    expect(await screen.findByText("01:00 · 1920×1080 · 1000 B")).not.toBeNull();
+    await user.click(screen.getByRole("button", { name: m.tool_video_start() }));
+
+    // 处理中：添加/清空/单项移除全禁用
+    expect(
+      screen.getByRole("button", { name: m.tool_video_list_add() }).hasAttribute("disabled"),
+    ).toBe(true);
+    expect(
+      screen.getByRole("button", { name: m.tool_video_list_clear() }).hasAttribute("disabled"),
+    ).toBe(true);
+    for (const remove of screen.getAllByRole("button", { name: m.tool_video_list_remove() })) {
+      expect(remove.hasAttribute("disabled")).toBe(true);
+    }
   });
 
   it("浏览器文件仅展示且标记不可处理", async () => {

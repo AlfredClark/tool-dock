@@ -48,6 +48,7 @@
   "tool_video_preview_title": "Preview",
   "tool_video_preview_empty": "Select a video from the left to preview",
   "tool_video_preview_poster": "Poster",
+  "tool_preview_loading": "Loading preview…",
   "tool_video_info_resolution": "Resolution",
   "tool_video_info_duration": "Duration",
   "tool_video_info_codec": "Codec",

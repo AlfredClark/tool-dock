@@ -43,8 +43,17 @@
   /** 视频扩展名：与后端白名单同源（对话框过滤器 + 拖放校验共用） */
   const VIDEO_EXTENSIONS = ["mp4", "m4v", "mov", "mkv", "webm", "avi", "ts"];
 
-  /** 海报帧边长：列表不用缩略图，中栏大预览 768 兼顾清晰度与内存 */
-  const THUMB_MAX_SIDE = 768;
+  /** 列表小海报边长：96px（批量一次取全；大海报选中后懒加载） */
+  const LIST_SIDE = 96;
+
+  /** 大海报边长：选中项按需取（与旧值一致，行为不变） */
+  const DETAIL_SIDE = 768;
+
+  /** 批量切块：单次 IPC 至多 200 条（后端上限 500，留余量防 URL 总量爆 IPC） */
+  const LOAD_CHUNK = 200;
+
+  /** 大海报缓存上限：30 张（LRU 淘汰并清空条目，防 data-URL 常驻爆内存） */
+  const DETAIL_CACHE_LIMIT = 30;
 
   /** 下载进度事件名，与 Rust 侧 `cores::ffmpeg::FFMPEG_DOWNLOAD_PROGRESS_EVENT` 会合 */
   const PROGRESS_EVENT = "ffmpeg-download-progress";
@@ -66,6 +75,16 @@
 
   /** 批量汇总：处理完成后常驻列表底部（改列表即失效，随增删清空） */
   let summary = $state<VideoConvertSummary | null>(null);
+
+  /** 载入进度：批量进行中有值（顶部细进度条展示，不锁开始按钮） */
+  let loadProgress = $state<{ loaded: number; total: number } | null>(null);
+
+  // 载入轮次：每次 addPaths/清空自增，在途回写先对轮次（清空与二次拖放丢弃旧批次）
+  let loadRun = 0;
+
+  // 大海报缓存：选中项 768px 按需取，LRU 上限 30（普通对象，插入序即访问序，命中时先删后插刷新；
+  // 刻意不用响应式 Map：缓存不是 UI 状态，不应订阅触发 effect）
+  const detailCache: Record<string, string> = {};
 
   /** 引擎状态：`null` 即查询中；缺失时开始按钮禁用并引导右栏 FFmpeg 页 */
   let ffmpegStatus = $state<FfmpegStatus | null>(null);
@@ -97,6 +116,65 @@
 
   /** 当前选中项：中栏预览与信息消费 */
   const selectedItem = $derived(items.find((item) => item.id === selectedId) ?? null);
+
+  // 大海报懒加载：选中就绪项后按需取 768px（抽帧时刻按当时长 10% 就地计算；缓存命中直接落盘）
+  $effect(() => {
+    const current = selectedItem;
+    if (
+      current === null ||
+      current.path === "" ||
+      current.info === null ||
+      current.status !== "ready" ||
+      current.detailUrl !== "" ||
+      current.detailLoading ||
+      current.detailFailed
+    ) {
+      return;
+    }
+    const cached = detailCache[current.id];
+    if (cached !== undefined) {
+      // 命中刷新 LRU 序（先删后插），落盘大海报
+      delete detailCache[current.id];
+      detailCache[current.id] = cached;
+      const hit = cached;
+      const hitId = current.id;
+      items = items.map((item) => (item.id === hitId ? { ...item, detailUrl: hit } : item));
+      return;
+    }
+    const run = loadRun;
+    const targetId = current.id;
+    const targetPath = current.path;
+    const seek = seekFor(current);
+    items = items.map((item) => (item.id === targetId ? { ...item, detailLoading: true } : item));
+    void commands
+      .getVideoThumbnail(targetPath, DETAIL_SIDE, seek)
+      .result()
+      .then((thumb) => {
+        if (run !== loadRun || thumb.status !== "ok" || thumb.data === "") {
+          // 空结果记终态失败：不再重试（`$effect` 守卫拦截，避免空转刷命令）
+          if (run === loadRun) {
+            items = items.map((item) =>
+              item.id === targetId ? { ...item, detailLoading: false, detailFailed: true } : item,
+            );
+          }
+          return;
+        }
+        detailCache[targetId] = thumb.data;
+        if (Object.keys(detailCache).length > DETAIL_CACHE_LIMIT) {
+          const oldest = Object.keys(detailCache)[0];
+          if (oldest !== undefined && oldest !== targetId) {
+            delete detailCache[oldest];
+            // 淘汰即释放：清空被逐条目的大海报（小海报保留）
+            const evicted = oldest;
+            items = items.map((item) => (item.id === evicted ? { ...item, detailUrl: "" } : item));
+          }
+        }
+        const large = thumb.data;
+        items = items.map((item) =>
+          item.id === targetId ? { ...item, detailUrl: large, detailLoading: false } : item,
+        );
+      });
+  });
 
   /** 可处理项：就绪 + 失败 + 已完成 + 已跳过（调参后可重新生成） */
   const processableCount = $derived(
@@ -169,14 +247,18 @@
   }
 
   /**
-   * 路径批量载入（桌面端）：文件夹先展平为视频 + 输出目录自动设为首个文件夹的 `edited/`； 再逐项读元信息 +
-   * 海报帧（失败标红，不中断其余）。展开失败回落原路径。
+   * 路径批量载入（桌面端）：文件夹先展平为视频 + 输出目录自动设为首个文件夹的 `edited/`； 再按 200 切块调批量命令（后端文件间 4
+   * 并发，元信息 + 96px 小海报一次回），每块合并一次落盘并让出一帧。 单项失败标红不中断其余；整块传输失败按块标红。展开失败回落原路径。
    */
   async function addPaths(paths: string[]): Promise<void> {
+    // 处理中锁定列表变更：拖放与对话框入口统一在此拦截（按钮侧同时禁用，双保险）
+    if (processing) return;
+    const run = ++loadRun;
     const dropped = paths.filter((path) => path !== "");
     if (dropped.length === 0) return;
     let files = dropped;
     const expanded = await commands.expandDroppedVideoPaths(dropped).result();
+    if (run !== loadRun) return;
     if (expanded.status === "ok") {
       files = expanded.data.files;
       const suggested = expanded.data.output_dir;
@@ -187,13 +269,17 @@
         toast.info(m.tool_video_output_auto_set({ dir: suggested }));
       }
     }
-    const fresh = files.filter((path) => path !== "" && !items.some((item) => item.id === path));
+    const seen = new Set(items.map((item) => item.id));
+    const fresh = files.filter((path) => path !== "" && !seen.has(path));
     if (fresh.length === 0) return;
     const shells: VideoConvertItem[] = fresh.map((path) => ({
       id: path,
       path,
       name: displayName(path, path),
       previewUrl: "",
+      detailUrl: "",
+      detailLoading: false,
+      detailFailed: false,
       info: null,
       errorDetail: null,
       status: "loading",
@@ -204,42 +290,55 @@
     if (selectedId === null) selectedId = shells[0].id;
     // 新一批次进列表，旧汇总失效
     summary = null;
-    for (const shell of shells) {
+    loadProgress = { loaded: 0, total: fresh.length };
+    let done = 0;
+    for (let start = 0; start < fresh.length; start += LOAD_CHUNK) {
+      if (run !== loadRun) return;
+      const chunk = fresh.slice(start, start + LOAD_CHUNK);
       let detail: string | null = null;
       const result = await commands
-        .readVideoMetadata(shell.path)
+        .readVideoBatch(chunk, LIST_SIDE)
         .failed((failure) => {
           detail = failureMessage(failure);
         })
         .result();
+      if (run !== loadRun) return;
       if (result.status === "error") {
+        const bad = new Set(chunk);
+        const message = detail ?? m.tool_video_request_failed();
         items = items.map((item) =>
-          item.id === shell.id
-            ? { ...item, status: "invalid", errorDetail: detail ?? m.tool_video_info_failed() }
+          item.status === "loading" && bad.has(item.id)
+            ? { ...item, status: "invalid", errorDetail: message }
             : item,
         );
-        continue;
-      }
-      // 元信息成功后再抽海报帧 `data:` URL（与预览共用；失败仅空预览，不降级条目）
-      const reading = items.find((item) => item.id === shell.id);
-      const thumb = await commands
-        .getVideoThumbnail(shell.path, THUMB_MAX_SIDE, reading ? seekFor(reading) : 1)
-        .result();
-      items = items.map((item) =>
-        item.id === shell.id
-          ? {
+      } else {
+        const byPath = new Map(result.data.map((entry) => [entry.path, entry]));
+        items = items.map((item) => {
+          if (item.status !== "loading" || !byPath.has(item.id)) return item;
+          const entry = byPath.get(item.id);
+          if (entry === undefined || !entry.ok || entry.info === null) {
+            return {
               ...item,
-              status: "ready",
-              info: result.data,
-              previewUrl: thumb.status === "ok" ? thumb.data : "",
-            }
-          : item,
-      );
+              status: "invalid",
+              errorDetail: entry?.error ?? m.tool_video_info_failed(),
+            };
+          }
+          // 小海报失败仅空预览，不降级条目（大海报选中后仍可按需取）
+          return { ...item, status: "ready", info: entry.info, previewUrl: entry.thumb ?? "" };
+        });
+      }
+      done += chunk.length;
+      loadProgress = { loaded: done, total: fresh.length };
+      // 每块之间让出一帧：批量回写间隙把 UI 线程还给渲染/拖拽
+      await nextFrame();
     }
+    if (run !== loadRun) return;
+    loadProgress = null;
   }
 
   /** 浏览器降级载入：仅展示文件名（无后端不可读），处理不可用 */
   async function addBrowserFiles(files: File[]): Promise<void> {
+    if (processing) return;
     const fresh = files.filter((file) => file.size > 0);
     for (const file of fresh) {
       const id = `browser:${file.name}:${file.size}:${file.lastModified}`;
@@ -249,6 +348,9 @@
         path: "",
         name: file.name,
         previewUrl: "",
+        detailUrl: "",
+        detailLoading: false,
+        detailFailed: false,
         info: null,
         errorDetail: m.tool_video_browser_unsupported(),
         status: "invalid",
@@ -263,6 +365,7 @@
 
   /** 添加视频：桌面端走对话框多选，浏览器走文件框（对话框不可用时降级） */
   async function handleAddVideos(): Promise<void> {
+    if (processing) return;
     try {
       const picked = await openDialog({
         multiple: true,
@@ -301,19 +404,25 @@
     await addBrowserFiles(files);
   }
 
-  /** 移除单项：选中项删除后选中邻项 */
+  /** 移除单项：清大海报缓存，选中项删除后选中邻项 */
   function handleRemove(id: string): void {
+    if (processing) return;
+    delete detailCache[id];
     const rest = items.filter((item) => item.id !== id);
     items = rest;
     summary = null;
     if (selectedId === id) selectedId = rest.length > 0 ? rest[rest.length - 1].id : null;
   }
 
-  /** 清空列表：重置选中/进度 */
+  /** 清空列表：作废在途批量（轮次自增丢弃回写），清缓存，重置选中/进度 */
   function handleClear(): void {
+    if (processing) return;
+    loadRun += 1;
+    for (const key of Object.keys(detailCache)) delete detailCache[key];
     items = [];
     selectedId = null;
     progress = null;
+    loadProgress = null;
     summary = null;
   }
 
@@ -536,6 +645,8 @@
     if (isDesktop) {
       getCurrentWebview()
         .onDragDropEvent((event) => {
+          // 处理中忽略拖放：悬浮不显 overlay，松手不进列表（`addPaths` 另有守卫，双保险）
+          if (processing) return;
           const payload = event.payload;
           if (payload.type === "enter") {
             dragDepth = 1;
@@ -555,10 +666,11 @@
         });
     }
 
-    // DOM 拖放（全环境 overlay + 浏览器降级读取）
+    // DOM 拖放（全环境 overlay + 浏览器降级读取）：处理中一律忽略，不改悬浮计数
     const handleDragEnter = (event: DragEvent): void => {
       if (!hasFiles(event)) return;
       event.preventDefault();
+      if (processing) return;
       dragDepth += 1;
     };
     const handleDragOver = (event: DragEvent): void => {
@@ -567,12 +679,13 @@
     const handleDragLeave = (event: DragEvent): void => {
       if (!hasFiles(event)) return;
       event.preventDefault();
+      if (processing) return;
       dragDepth = Math.max(0, dragDepth - 1);
     };
     const handleDrop = (event: DragEvent): void => {
       event.preventDefault();
       dragDepth = 0;
-      if (tauriDropReady) return;
+      if (processing || tauriDropReady) return;
       const files = [...(event.dataTransfer?.files ?? [])];
       if (files.length > 0) void addBrowserFiles(files);
     };
@@ -592,6 +705,15 @@
 
 <!-- 三栏可调：左列表 25 + 中预览 50 + 右参数 25（初始比例 1:2:1，不持久化） -->
 <div class={cn("relative h-full w-full")}>
+  {#if loadProgress}
+    <!-- 批量载入进度：顶部细条，不锁交互（开始按钮以就绪项为准，可边载边开始） -->
+    <div class={cn("absolute inset-x-0 top-0 z-20 h-0.5 bg-muted")}>
+      <div
+        class={cn("h-full bg-primary transition-all")}
+        style={`width: ${(loadProgress.loaded / Math.max(1, loadProgress.total)) * 100}%`}
+      ></div>
+    </div>
+  {/if}
   <ResizablePaneGroup direction="horizontal">
     <ResizablePane defaultSize={25} minSize={15}>
       <div class={cn("flex h-full min-h-0 flex-col bg-background")}>

@@ -407,6 +407,172 @@ pub fn read_video_thumbnail(
     anyhow::bail!("thumbnail failed for {path}")
 }
 
+/// 批量并发度：进程拉起 + 流式拷贝为 IO 密集，取 4（与图片侧对齐，前端不再串行等待）
+pub const VIDEO_BATCH_WORKERS: usize = 4;
+
+/// 单次批量上限：500（前端超限自行切块，海报 `data:` URL 总量可控不爆 IPC）
+pub const MAX_VIDEO_BATCH: usize = 500;
+
+/// 列表海报边长上限：128（96px 行 + 高分屏余量；768 大海报走单文件命令按需取）
+pub const MAX_VIDEO_LIST_SIDE: u32 = 128;
+
+/// 批量单项结果：`ok` 为真读 `info`（`thumb` 缺失仅空预览，不降级条目），为假读 `error`；
+/// 顺序与入参一一对应，前端按下标合并无需再对齐
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Type)]
+pub struct VideoBatchItem {
+    pub path: String,
+    pub ok: bool,
+    pub info: Option<VideoFileMetadata>,
+    pub thumb: Option<String>,
+    pub error: Option<String>,
+}
+
+impl VideoBatchItem {
+    const fn success(path: String, info: VideoFileMetadata, thumb: Option<String>) -> Self {
+        Self {
+            path,
+            ok: true,
+            info: Some(info),
+            thumb,
+            error: None,
+        }
+    }
+
+    const fn failure(path: String, message: String) -> Self {
+        Self {
+            path,
+            ok: false,
+            info: None,
+            thumb: None,
+            error: Some(message),
+        }
+    }
+}
+
+/// 批量读取元信息 + 列表小海报：单文件内 `ffprobe → seek → 抽帧` 顺序做（抽帧时刻依赖时长），
+/// 文件间多线程并发；单项失败装进 `error` 跳过继续。参数非法才整批抛错。
+pub fn read_video_batch(
+    ffmpeg: &Path,
+    ffprobe: &Path,
+    paths: &[String],
+    list_side: u32,
+) -> anyhow::Result<Vec<VideoBatchItem>> {
+    if !(1..=MAX_VIDEO_LIST_SIDE).contains(&list_side) {
+        anyhow::bail!("invalid list poster size: {list_side}");
+    }
+    if paths.len() > MAX_VIDEO_BATCH {
+        anyhow::bail!("too many files in one batch: {}", paths.len());
+    }
+    if paths.is_empty() {
+        return Ok(Vec::new());
+    }
+    // 槽位与入参同下标：工作线程只写自己抢到的槽，互不重叠，顺序天然保留
+    let slots: Vec<std::sync::Mutex<Option<VideoBatchItem>>> =
+        paths.iter().map(|_| std::sync::Mutex::new(None)).collect();
+    let next = std::sync::atomic::AtomicUsize::new(0);
+    let workers = VIDEO_BATCH_WORKERS.min(paths.len());
+    std::thread::scope(|scope| {
+        for _ in 0..workers {
+            scope.spawn(|| {
+                loop {
+                    let index = next.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                    let Some(path) = paths.get(index) else {
+                        break;
+                    };
+                    let item = read_video_entry(ffmpeg, ffprobe, path, list_side);
+                    if let Ok(mut slot) = slots[index].lock() {
+                        *slot = Some(item);
+                    }
+                }
+            });
+        }
+    });
+    let mut out = Vec::with_capacity(paths.len());
+    for (index, slot) in slots.into_iter().enumerate() {
+        match slot.into_inner() {
+            Ok(Some(item)) => out.push(item),
+            // 锁中毒仅理论可达：回落失败项保住顺序与长度，前端按单项标红
+            _ => out.push(VideoBatchItem::failure(
+                paths[index].clone(),
+                "batch slot poisoned".to_string(),
+            )),
+        }
+    }
+    Ok(out)
+}
+
+/// 批量单项装配：元信息成功后再抽小海报，抽帧失败仅空图不降级条目
+fn read_video_entry(ffmpeg: &Path, ffprobe: &Path, path: &str, list_side: u32) -> VideoBatchItem {
+    let info = match read_video_metadata(ffprobe, path) {
+        Ok(info) => info,
+        Err(err) => return VideoBatchItem::failure(path.to_string(), format!("{err:#}")),
+    };
+    let seek = poster_seek_for(info.duration_seconds);
+    match read_video_poster_small(ffmpeg, path, list_side, seek) {
+        Ok(thumb) => VideoBatchItem::success(path.to_string(), info, Some(thumb)),
+        Err(_) => VideoBatchItem::success(path.to_string(), info, None),
+    }
+}
+
+/// 海报抽帧时刻：时长 10% 处（钳制 0.5s–10s），未知时长回落 1s（与前端旧 `seekFor` 同语义，后端批量内聚）
+const fn poster_seek_for(duration_seconds: Option<f64>) -> f64 {
+    match duration_seconds {
+        Some(duration) if duration.is_finite() => duration.mul_add(0.1, 0.0).clamp(0.5, 10.0),
+        _ => 1.0,
+    }
+}
+
+/// 读取列表小海报：`seek_seconds` 处单帧 JPEG，以 `data:` URL 返回（列表 96px 行用，
+/// 体积仅为 PNG 大海报零头；768 大海报走既有 `read_video_thumbnail` 按需取）。
+/// 首选时刻失败回退 0 秒；输出封顶 20MiB 防坏帧刷屏。
+pub fn read_video_poster_small(
+    ffmpeg: &Path,
+    path: &str,
+    list_side: u32,
+    seek_seconds: f64,
+) -> anyhow::Result<String> {
+    use base64::{Engine as _, engine::general_purpose::STANDARD};
+
+    if !is_supported_video(path) {
+        anyhow::bail!("unsupported video format: {path}");
+    }
+    if !(1..=MAX_VIDEO_LIST_SIDE).contains(&list_side) {
+        anyhow::bail!("invalid list poster size: {list_side}");
+    }
+    let scale = format!("scale=w='if(gt(iw,ih),{list_side},-2)':h='if(gt(iw,ih),-2,{list_side})'");
+    for seek in [seek_seconds.max(0.0), 0.0] {
+        let output = std::process::Command::new(ffmpeg)
+            .args([
+                "-ss",
+                &seek.to_string(),
+                "-i",
+                path,
+                "-vframes",
+                "1",
+                "-vf",
+                scale.as_str(),
+                "-f",
+                "image2pipe",
+                "-vcodec",
+                "mjpeg",
+                "-q:v",
+                "5",
+                "-",
+            ])
+            .output()
+            .with_context(|| format!("failed to run ffmpeg on {path}"))?;
+        if output.status.success() && !output.stdout.is_empty() {
+            if output.stdout.len() > MAX_THUMBNAIL_BYTES {
+                anyhow::bail!("thumbnail too large for {path}");
+            }
+            return Ok(format!(
+                "data:image/jpeg;base64,{}",
+                STANDARD.encode(&output.stdout)
+            ));
+        }
+    }
+    anyhow::bail!("thumbnail failed for {path}")
+}
 /// 写入标签与封面：输出路径按输出目录 + 输入原名计算（同后缀，`-c copy` 不换容器），
 /// `overwrite` 三策略与图片侧同语义（跳过即 `Skipped`，不算失败）；
 /// 封面走独立分支（找不到/不支持/损坏一律跳过封面、标签照写，不影响 `ok`）；
@@ -1175,6 +1341,35 @@ mod tests {
         let fake = Path::new("/nonexistent/ffprobe");
         assert!(read_video_metadata(fake, "clip.txt").is_err());
         assert!(read_video_thumbnail(fake, "clip.txt", 768, 1.0).is_err());
+    }
+
+    #[test]
+    fn poster_seek_clamps_to_half_and_ten_seconds() {
+        assert_eq!(poster_seek_for(None), 1.0);
+        assert_eq!(poster_seek_for(Some(f64::NAN)), 1.0);
+        assert_eq!(poster_seek_for(Some(1.0)), 0.5);
+        assert_eq!(poster_seek_for(Some(50.0)), 5.0);
+        assert_eq!(poster_seek_for(Some(500.0)), 10.0);
+    }
+
+    #[test]
+    fn batch_validates_params_and_keeps_order_on_failure() {
+        let fake = Path::new("/nonexistent/ffmpeg");
+        // 边长越界与超量整批拒绝，不进子进程
+        assert!(read_video_batch(fake, fake, &["a.mp4".to_string()], 0).is_err());
+        assert!(
+            read_video_batch(fake, fake, &["a.mp4".to_string()], MAX_VIDEO_LIST_SIDE + 1).is_err()
+        );
+        assert_eq!(read_video_batch(fake, fake, &[], 96).unwrap(), Vec::new());
+        let oversized = vec!["x.mp4".to_string(); MAX_VIDEO_BATCH + 1];
+        assert!(read_video_batch(fake, fake, &oversized, 96).is_err());
+        // 非白名单扩展名逐项失败但顺序保留（不拉起进程）
+        let items =
+            read_video_batch(fake, fake, &["b.txt".to_string(), "a.txt".to_string()], 96).unwrap();
+        assert_eq!(items.len(), 2);
+        assert_eq!(items[0].path, "b.txt");
+        assert_eq!(items[1].path, "a.txt");
+        assert!(items.iter().all(|item| !item.ok && item.error.is_some()));
     }
 
     #[test]

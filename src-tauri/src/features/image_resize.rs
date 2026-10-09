@@ -573,15 +573,137 @@ const THUMB_QUALITY: u8 = 72;
 /// `data:` URL 回前端。WebView 的 `asset` 协议需配 scope 才放行本地路径，
 /// 直接回 data URL 可保持最小授权（CSP 的 `img-src` 已放行 `data:`）。
 /// 失败抛错走 `CommandError`，前端按单张标红处理。
-// `as` 安全：`max_side` 已钳制 1-2048，缩放比为 `(0, 1]` 有限值，`round` 后非负
-#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
 pub fn read_image_thumbnail(path: &str, max_side: u32) -> anyhow::Result<String> {
-    use base64::{Engine as _, engine::general_purpose::STANDARD};
-
     if !(1..=MAX_THUMB_SIDE).contains(&max_side) {
         anyhow::bail!("invalid thumbnail size: {max_side}");
     }
     let (decoded, _) = decode_oriented(path)?;
+    thumb_data_url(&decoded, max_side)
+}
+
+/// 批量并发度：解码 + `Lanczos3` 为 CPU 密集，保守取 4（单线程解码库下超配无收益）
+pub const IMAGE_BATCH_WORKERS: usize = 4;
+
+/// 单次批量上限：500（前端超限自行切块，`data:` URL 总量可控不爆 IPC）
+pub const MAX_IMAGE_BATCH: usize = 500;
+
+/// 列表缩略图边长上限：128（96px 列表行 + 高分屏余量；768 大预览走单文件命令按需取）
+pub const MAX_LIST_SIDE: u32 = 128;
+
+/// 批量单项结果：`ok` 为真读 `info`（`thumb` 缺失仅空预览，不降级条目），为假读 `error`；
+/// 顺序与入参一一对应，前端按下标合并无需再对齐
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct ImageBatchItem {
+    pub path: String,
+    pub ok: bool,
+    pub info: Option<ImageInfo>,
+    pub thumb: Option<String>,
+    pub error: Option<String>,
+}
+
+impl ImageBatchItem {
+    const fn success(path: String, info: ImageInfo, thumb: Option<String>) -> Self {
+        Self {
+            path,
+            ok: true,
+            info: Some(info),
+            thumb,
+            error: None,
+        }
+    }
+
+    const fn failure(path: String, message: String) -> Self {
+        Self {
+            path,
+            ok: false,
+            info: None,
+            thumb: None,
+            error: Some(message),
+        }
+    }
+}
+
+/// 批量读取元信息 + 列表小图：单文件内一次全解码同时产出两者（旧双命令是两次读盘），
+/// 文件间 4 线程并发；单项失败装进 `error` 跳过继续，不抛错中断整批。
+/// 参数非法（边长越界/超量）才整批抛错，前端切块重试。
+pub fn read_image_batch(paths: &[String], list_side: u32) -> anyhow::Result<Vec<ImageBatchItem>> {
+    if !(1..=MAX_LIST_SIDE).contains(&list_side) {
+        anyhow::bail!("invalid list thumbnail size: {list_side}");
+    }
+    if paths.len() > MAX_IMAGE_BATCH {
+        anyhow::bail!("too many files in one batch: {}", paths.len());
+    }
+    if paths.is_empty() {
+        return Ok(Vec::new());
+    }
+    // 槽位与入参同下标：工作线程只写自己抢到的槽，互不重叠，顺序天然保留
+    let slots: Vec<std::sync::Mutex<Option<ImageBatchItem>>> =
+        paths.iter().map(|_| std::sync::Mutex::new(None)).collect();
+    let next = std::sync::atomic::AtomicUsize::new(0);
+    let workers = IMAGE_BATCH_WORKERS.min(paths.len());
+    std::thread::scope(|scope| {
+        for _ in 0..workers {
+            scope.spawn(|| {
+                loop {
+                    let index = next.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                    let Some(path) = paths.get(index) else {
+                        break;
+                    };
+                    let item = read_image_entry(path, list_side);
+                    if let Ok(mut slot) = slots[index].lock() {
+                        *slot = Some(item);
+                    }
+                }
+            });
+        }
+    });
+    let mut out = Vec::with_capacity(paths.len());
+    for (index, slot) in slots.into_iter().enumerate() {
+        match slot.into_inner() {
+            Ok(Some(item)) => out.push(item),
+            // 锁中毒仅理论可达：回落失败项保住顺序与长度，前端按单张标红
+            _ => out.push(ImageBatchItem::failure(
+                paths[index].clone(),
+                "batch slot poisoned".to_string(),
+            )),
+        }
+    }
+    Ok(out)
+}
+
+/// 批量单项装配：一次 `decode_oriented` 同时拿尺寸与像素，缩略图失败仅空图不降级条目
+fn read_image_entry(path: &str, list_side: u32) -> ImageBatchItem {
+    let (decoded, format) = match decode_oriented(path) {
+        Ok(pair) => pair,
+        Err(fault) => return ImageBatchItem::failure(path.to_string(), fault_message(&fault)),
+    };
+    let file_size = std::fs::metadata(path).map_or(u32::MAX, |meta| {
+        u32::try_from(meta.len()).unwrap_or(u32::MAX)
+    });
+    let info = ImageInfo {
+        width: decoded.width(),
+        height: decoded.height(),
+        format,
+        file_size,
+    };
+    // 缩略图失败仅空图（`None`），不降级条目
+    let thumb = thumb_data_url(&decoded, list_side).ok();
+    ImageBatchItem::success(path.to_string(), info, thumb)
+}
+
+/// 输入校验失败转单项错误文本：与 `resize_inner` 的码映射同口径，前端只做展示
+fn fault_message(fault: &InputFault) -> String {
+    match fault {
+        InputFault::TooLarge(message) | InputFault::Unsupported(message) => message.clone(),
+        InputFault::Decode(err) => format!("{err:#}"),
+    }
+}
+
+// `as` 安全：`max_side` 已钳制 1-2048，缩放比为 `(0, 1]` 有限值，`round` 后非负
+#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+fn thumb_data_url(decoded: &DynamicImage, max_side: u32) -> anyhow::Result<String> {
+    use base64::{Engine as _, engine::general_purpose::STANDARD};
+
     let longest = decoded.width().max(decoded.height());
     let (thumb_w, thumb_h) = if longest <= max_side {
         (decoded.width(), decoded.height())
@@ -593,7 +715,7 @@ pub fn read_image_thumbnail(path: &str, max_side: u32) -> anyhow::Result<String>
     };
     // 缩略图固定最高质量插值（预览用途，不跟随用户选择的批量插值）
     let thumb = DynamicImage::ImageRgba8(imageops_resize(
-        &decoded,
+        decoded,
         thumb_w,
         thumb_h,
         FilterType::Lanczos3,
@@ -1521,5 +1643,59 @@ mod tests {
             .file_name()
             .and_then(|name| name.to_str())
             .unwrap_or(path)
+    }
+
+    #[test]
+    fn batch_returns_ordered_items_and_skips_failures() {
+        let dir = sandbox("batch");
+        let first = dir.join("a.png");
+        let second = dir.join("b.png");
+        write_sample_png(&first, 64, 48);
+        write_sample_png(&second, 32, 32);
+        let missing = dir.join("gone.png");
+        let txt = dir.join("note.txt");
+        std::fs::write(&txt, "hello").unwrap();
+        let paths = [
+            first.to_str().unwrap().to_string(),
+            missing.to_str().unwrap().to_string(),
+            txt.to_str().unwrap().to_string(),
+            second.to_str().unwrap().to_string(),
+        ];
+        let items = read_image_batch(&paths, 96).expect("batch");
+        // 顺序与入参一致，失败项不中断其余
+        assert_eq!(items.len(), 4);
+        assert!(items[0].ok);
+        assert_eq!(
+            items[0].info.map(|info| (info.width, info.height)),
+            Some((64, 48))
+        );
+        assert!(
+            items[0]
+                .thumb
+                .as_deref()
+                .is_some_and(|thumb| { thumb.starts_with("data:image/jpeg;base64,") })
+        );
+        assert!(!items[1].ok);
+        assert!(items[1].error.is_some());
+        assert!(!items[2].ok);
+        assert!(items[3].ok);
+        assert_eq!(
+            items[3].info.map(|info| (info.width, info.height)),
+            Some((32, 32))
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn batch_validates_params() {
+        let dir = sandbox("batch-params");
+        write_sample_png(&dir.join("a.png"), 8, 8);
+        let paths = vec![dir.join("a.png").to_str().unwrap().to_string()];
+        assert!(read_image_batch(&paths, 0).is_err());
+        assert!(read_image_batch(&paths, MAX_LIST_SIDE + 1).is_err());
+        assert_eq!(read_image_batch(&[], 96).unwrap(), Vec::new());
+        let oversized = vec!["x".to_string(); MAX_IMAGE_BATCH + 1];
+        assert!(read_image_batch(&oversized, 96).is_err());
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

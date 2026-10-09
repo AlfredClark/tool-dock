@@ -86,117 +86,131 @@
 </script>
 
 {#if item}
-  <div
-    class={cn(
-      "flex shrink-0 flex-col gap-2 border-t px-3 py-2 text-xs tabular-nums",
-      "max-h-64 overflow-y-auto",
-    )}
-  >
-    <div class={cn("flex flex-wrap items-center gap-x-4 gap-y-1 text-muted-foreground")}>
-      {#if item.info?.stream?.width != null && item.info?.stream?.height != null}
-        <span
-          >{m.tool_video_info_resolution()} {item.info.stream.width}×{item.info.stream.height}</span
-        >
-      {:else}
-        <span>{m.tool_video_info_no_stream()}</span>
-      {/if}
-      {#if item.info?.duration_seconds != null}
-        <span>
-          {m.tool_video_info_duration()}
-          {formatClock(item.info.duration_seconds)}
-        </span>
-      {/if}
-      {#if item.info?.stream?.codec_name}
-        <span>{m.tool_video_info_codec()} {item.info.stream.codec_name}</span>
-      {/if}
-      {#if item.info?.file_size != null}
-        <span>{m.tool_video_info_size()} {formatDownloadSize(item.info.file_size)}</span>
-      {/if}
-      {#if item.info?.format_name}
-        <span>{m.tool_video_info_format()} {item.info.format_name.split(",")[0]}</span>
-      {/if}
-      {#if item.info}
-        <span>
-          {m.tool_video_info_cover()}
-          {item.info.has_cover ? m.tool_video_info_cover_yes() : m.tool_video_info_cover_no()}
-        </span>
-      {/if}
+  {#if item.status === "loading"}
+    <!-- 批量载入中：标签与技术行未到，整块显示加载态，不误显示“无标签” -->
+    <div
+      class={cn(
+        "flex shrink-0 items-center gap-2 border-t px-3 py-2 text-xs text-muted-foreground tabular-nums",
+      )}
+    >
+      <span class={cn("size-3 animate-pulse rounded-sm bg-muted-foreground/40")} aria-hidden="true"
+      ></span>
+      <span>{m.tool_preview_loading()}</span>
     </div>
-    <div class={cn("flex flex-col gap-1")}>
-      <span class={cn("font-medium text-muted-foreground")}>{m.tool_video_info_tags()}</span>
-      {#if rows.every((row) => row.current == null)}
-        <span class={cn("text-muted-foreground")}>{m.tool_video_info_no_tags()}</span>
-      {:else}
+  {:else}
+    <div
+      class={cn(
+        "flex shrink-0 flex-col gap-2 border-t px-3 py-2 text-xs tabular-nums",
+        "max-h-64 overflow-y-auto",
+      )}
+    >
+      <div class={cn("flex flex-wrap items-center gap-x-4 gap-y-1 text-muted-foreground")}>
+        {#if item.info?.stream?.width != null && item.info?.stream?.height != null}
+          <span
+            >{m.tool_video_info_resolution()}
+            {item.info.stream.width}×{item.info.stream.height}</span
+          >
+        {:else}
+          <span>{m.tool_video_info_no_stream()}</span>
+        {/if}
+        {#if item.info?.duration_seconds != null}
+          <span>
+            {m.tool_video_info_duration()}
+            {formatClock(item.info.duration_seconds)}
+          </span>
+        {/if}
+        {#if item.info?.stream?.codec_name}
+          <span>{m.tool_video_info_codec()} {item.info.stream.codec_name}</span>
+        {/if}
+        {#if item.info?.file_size != null}
+          <span>{m.tool_video_info_size()} {formatDownloadSize(item.info.file_size)}</span>
+        {/if}
+        {#if item.info?.format_name}
+          <span>{m.tool_video_info_format()} {item.info.format_name.split(",")[0]}</span>
+        {/if}
+        {#if item.info}
+          <span>
+            {m.tool_video_info_cover()}
+            {item.info.has_cover ? m.tool_video_info_cover_yes() : m.tool_video_info_cover_no()}
+          </span>
+        {/if}
+      </div>
+      <div class={cn("flex flex-col gap-1")}>
+        <span class={cn("font-medium text-muted-foreground")}>{m.tool_video_info_tags()}</span>
+        {#if rows.every((row) => row.current == null)}
+          <span class={cn("text-muted-foreground")}>{m.tool_video_info_no_tags()}</span>
+        {:else}
+          {#each rows as row (row.key)}
+            {#if row.current != null}
+              <div class={cn("flex min-w-0 items-baseline gap-2")}>
+                <span class={cn("shrink-0 text-muted-foreground")}>{tagLabels[row.key]}</span>
+                <span class={cn("min-w-0 flex-1 truncate")} title={row.current}>{row.current}</span>
+              </div>
+            {/if}
+          {/each}
+        {/if}
+      </div>
+      <div class={cn("flex flex-col gap-1")}>
+        <span class={cn("font-medium text-muted-foreground")}>{m.tool_video_info_expanded()}</span>
         {#each rows as row (row.key)}
-          {#if row.current != null}
-            <div class={cn("flex min-w-0 items-baseline gap-2")}>
-              <span class={cn("shrink-0 text-muted-foreground")}>{tagLabels[row.key]}</span>
-              <span class={cn("min-w-0 flex-1 truncate")} title={row.current}>{row.current}</span>
-            </div>
-          {/if}
+          <div class={cn("flex min-w-0 items-baseline gap-2")}>
+            <span class={cn("shrink-0 text-muted-foreground")}>{tagLabels[row.key]}</span>
+            {#if row.text == null}
+              <span class={cn("text-muted-foreground")}>—</span>
+            {:else if row.text === ""}
+              <span class={cn("text-amber-600 dark:text-amber-400")}>
+                {m.tool_video_tag_cleared()}
+              </span>
+            {:else}
+              <span
+                class={cn("min-w-0 flex-1 truncate", row.unknown && "text-destructive")}
+                title={row.text}
+              >
+                {row.text}
+              </span>
+            {/if}
+          </div>
         {/each}
-      {/if}
-    </div>
-    <div class={cn("flex flex-col gap-1")}>
-      <span class={cn("font-medium text-muted-foreground")}>{m.tool_video_info_expanded()}</span>
-      {#each rows as row (row.key)}
+        {#if unknownNames.length > 0}
+          <span class={cn("text-destructive")}>
+            {m.tool_video_unknown_placeholder({
+              names: unknownNames.map((name) => `%${name}%`).join(" "),
+            })}
+          </span>
+        {/if}
+      </div>
+      <div class={cn("flex flex-col gap-1")}>
+        <span class={cn("font-medium text-muted-foreground")}>{m.tool_video_cover_label()}</span>
         <div class={cn("flex min-w-0 items-baseline gap-2")}>
-          <span class={cn("shrink-0 text-muted-foreground")}>{tagLabels[row.key]}</span>
-          {#if row.text == null}
+          {#if coverPreview.text == null}
             <span class={cn("text-muted-foreground")}>—</span>
-          {:else if row.text === ""}
+          {:else if coverPreview.text === ""}
             <span class={cn("text-amber-600 dark:text-amber-400")}>
               {m.tool_video_tag_cleared()}
             </span>
           {:else}
             <span
-              class={cn("min-w-0 flex-1 truncate", row.unknown && "text-destructive")}
-              title={row.text}
+              class={cn("min-w-0 flex-1 truncate", coverPreview.unknown && "text-destructive")}
+              title={coverPreview.text}
             >
-              {row.text}
+              {coverPreview.text}
             </span>
           {/if}
         </div>
-      {/each}
-      {#if unknownNames.length > 0}
-        <span class={cn("text-destructive")}>
-          {m.tool_video_unknown_placeholder({
-            names: unknownNames.map((name) => `%${name}%`).join(" "),
-          })}
+      </div>
+      {#if item.output}
+        <span class={cn("truncate text-emerald-600 dark:text-emerald-400")} title={item.output}>
+          → {item.output}
+        </span>
+      {/if}
+      {#if item.coverNote}
+        <span class={cn("text-muted-foreground")}>{item.coverNote}</span>
+      {/if}
+      {#if item.errorDetail}
+        <span class={cn(item.status === "skipped" ? "text-muted-foreground" : "text-destructive")}>
+          {item.errorDetail}
         </span>
       {/if}
     </div>
-    <div class={cn("flex flex-col gap-1")}>
-      <span class={cn("font-medium text-muted-foreground")}>{m.tool_video_cover_label()}</span>
-      <div class={cn("flex min-w-0 items-baseline gap-2")}>
-        {#if coverPreview.text == null}
-          <span class={cn("text-muted-foreground")}>—</span>
-        {:else if coverPreview.text === ""}
-          <span class={cn("text-amber-600 dark:text-amber-400")}>
-            {m.tool_video_tag_cleared()}
-          </span>
-        {:else}
-          <span
-            class={cn("min-w-0 flex-1 truncate", coverPreview.unknown && "text-destructive")}
-            title={coverPreview.text}
-          >
-            {coverPreview.text}
-          </span>
-        {/if}
-      </div>
-    </div>
-    {#if item.output}
-      <span class={cn("truncate text-emerald-600 dark:text-emerald-400")} title={item.output}>
-        → {item.output}
-      </span>
-    {/if}
-    {#if item.coverNote}
-      <span class={cn("text-muted-foreground")}>{item.coverNote}</span>
-    {/if}
-    {#if item.errorDetail}
-      <span class={cn(item.status === "skipped" ? "text-muted-foreground" : "text-destructive")}>
-        {item.errorDetail}
-      </span>
-    {/if}
-  </div>
+  {/if}
 {/if}
