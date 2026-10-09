@@ -68,6 +68,11 @@ export const commands = {
 	openConfigDir: () => typedError<null, CommandError>(__TAURI_INVOKE("open_config_dir")),
 	/**  复制系统信息到剪贴板；文本由后端组装，前端只调命令 */
 	copySystemInfo: () => typedError<null, CommandError>(__TAURI_INVOKE("copy_system_info")),
+	/**
+	 *  批量改名：一次调用返回整批逐项结果（顺序与入参一致），单项跳过/失败不中断其余。
+	 *  阻塞文件操作经 `spawn_blocking` 隔离，不饿死异步运行时。
+	 */
+	renameFiles: (items: RenameItem[]) => typedError<RenameOutcome[], CommandError>(__TAURI_INVOKE("rename_files", { items })),
 	/**  转换数据格式；`from` 为空即自动识别。业务失败装进 `ConvertOutcome`，本命令几乎恒返回 `Ok`。 */
 	convertData: (input: string, from: "json" | "yaml" | "toml" | "xml" | "ini" | "properties" | null, to: ConvertFormat, options: ConvertOptions) => typedError<ConvertOutcome, CommandError>(__TAURI_INVOKE("convert_data", { input, from, to, options })),
 	/**  复制转换结果到系统剪贴板；纯文本直写（需 `AppHandle`，故走 `cores`，与 `copy_system_info` 同模式） */
@@ -387,6 +392,24 @@ export type OutputResolution = "source" | "p1080" | "p720" | "p480";
 
 /**  重名文件处理策略：递增重命名（现状）/ 直接覆盖 / 跳过（错误码 `Skipped`） */
 export type OverwritePolicy = "increment" | "overwrite" | "skip";
+
+/**  改名输入项：`path` 为源完整路径，`new_name` 为前端预览算好的目标文件名（含扩展名） */
+export type RenameItem = {
+	path: string,
+	new_name: string,
+};
+
+/**  单项改名结果：成功带 `new_path`，跳过带原因，失败带英文诊断（前端映射通用文案展示） */
+export type RenameOutcome = {
+	ok: boolean,
+	path: string,
+	new_path: string | null,
+	skipped: RenameSkip | null,
+	error: string | null,
+};
+
+/**  跳过原因：名称未变（预览与原名一致）/ 目标已存在（永不覆盖用户文件） */
+export type RenameSkip = "unchanged" | "exists";
 
 /**  业务错误体：扁平结构便于 `specta` 导出，前端按 `code` 分支 */
 export type ResizeError = {

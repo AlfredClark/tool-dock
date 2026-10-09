@@ -10,6 +10,7 @@ pub mod config;
 pub mod ffmpeg;
 pub mod image_resize;
 pub mod system;
+pub mod system_renamer;
 pub mod text_convert;
 pub mod updater;
 pub mod video_convert;
@@ -39,6 +40,7 @@ macro_rules! collect_commands {
             $crate::commands::system::open_log_dir,
             $crate::commands::system::open_config_dir,
             $crate::commands::system::copy_system_info,
+            $crate::commands::system_renamer::rename_files,
             $crate::commands::text_convert::convert_data,
             $crate::commands::text_convert::copy_text,
             $crate::commands::text_convert::read_text_file,

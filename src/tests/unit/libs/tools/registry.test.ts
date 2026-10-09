@@ -125,3 +125,24 @@ describe("视频格式转换工具", () => {
     expect(hits).toContain("video-convert");
   });
 });
+
+describe("批量重命名工具", () => {
+  it("注册信息完整", () => {
+    const tool = resolveTool("/system/renamer");
+
+    expect(tool?.id).toBe("renamer");
+    expect(tool?.category).toBe("system");
+    expect(tool?.name()).toBe("Batch renamer");
+  });
+
+  it("搜索命中", () => {
+    const hits = searchTools("Renamer").map((tool) => tool.id);
+
+    expect(hits).toContain("renamer");
+  });
+
+  it("系统分类文案已登记", () => {
+    expect(categoryLabel("system")).toBe("System");
+    expect(isToolCategory("system")).toBe(true);
+  });
+});

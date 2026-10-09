@@ -2,6 +2,7 @@
 // 文案存消息函数引用（切换语言走整页重载，此处无需响应式包装），调用方使用时再求值。
 import ArrowLeftRightIcon from "@lucide/svelte/icons/arrow-left-right";
 import ClapperboardIcon from "@lucide/svelte/icons/clapperboard";
+import FilePenLineIcon from "@lucide/svelte/icons/file-pen-line";
 import FileVideoIcon from "@lucide/svelte/icons/file-video";
 import ScalingIcon from "@lucide/svelte/icons/scaling";
 import { m } from "$libs/i18n/paraglide/messages";
@@ -45,6 +46,14 @@ export const TOOLS = [
     name: m.tool_video_convert_name,
     description: m.tool_video_convert_description,
     icon: FileVideoIcon,
+  },
+  {
+    id: "renamer",
+    path: "/system/renamer",
+    category: "system",
+    name: m.tool_renamer_name,
+    description: m.tool_renamer_description,
+    icon: FilePenLineIcon,
   },
 ] as const;
 
