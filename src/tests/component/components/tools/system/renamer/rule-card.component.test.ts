@@ -26,13 +26,13 @@ if (typeof ResizeObserver === "undefined") {
 }
 
 const KIND_LABELS: Record<RenamerRule["kind"], string> = {
-  affix: "Add affix",
-  strip: "Strip affix",
-  case: "Change case",
+  affix: "Affix · Add · Suffix",
+  case: "Letter case · Lowercase",
   replace: "Find & replace",
   regex: "Regex replace",
   number: "Auto number",
-  normalize: "Normalize",
+  normalize: "Normalize · Trim ends",
+  slice: "Slice · Anchor 0",
 };
 
 function renderCard(rule: RenamerRule, overrides: Record<string, unknown> = {}) {
@@ -72,6 +72,82 @@ describe("规则参数卡", () => {
 
     expect(screen.getByText(KIND_LABELS[kind])).not.toBeNull();
     expect(screen.getByText("#2")).not.toBeNull();
+  });
+
+  it("前后缀卡默认操作为添加，标题带出模式与位置", () => {
+    renderCard(createRule("affix"));
+
+    expect(screen.getByText("Affix · Add · Suffix")).not.toBeNull();
+    expect(screen.getByText("Action")).not.toBeNull();
+    expect(screen.getByText("Add")).not.toBeNull();
+  });
+
+  it("前后缀删除模式标题带出删除", () => {
+    renderCard({ ...createRule("affix"), mode: "remove" });
+
+    expect(screen.getByText("Affix · Remove · Suffix")).not.toBeNull();
+  });
+
+  it("前后缀标题带出位置与具体文本", () => {
+    renderCard({ ...createRule("affix"), mode: "add", position: "prefix", text: "IMG_" });
+
+    expect(screen.getByText('Affix · Add · Prefix "IMG_"')).not.toBeNull();
+  });
+
+  it("大小写卡默认调整方式为全部小写", () => {
+    renderCard(createRule("case"));
+
+    expect(screen.getByText("Letter case · Lowercase")).not.toBeNull();
+    expect(screen.getByText("Transform")).not.toBeNull();
+    expect(screen.getByText("Lowercase")).not.toBeNull();
+  });
+
+  it("规范化卡默认规范内容为去首尾空格", () => {
+    renderCard(createRule("normalize"));
+
+    expect(screen.getByText("Normalize · Trim ends")).not.toBeNull();
+    expect(screen.getByText("Content")).not.toBeNull();
+    expect(screen.getByText("Trim ends")).not.toBeNull();
+  });
+
+  it("自动编号卡默认格式为 $n 且与位置同行", () => {
+    renderCard(createRule("number"));
+
+    expect(screen.getByText("Format")).not.toBeNull();
+    expect(screen.getByDisplayValue("$n")).not.toBeNull();
+  });
+
+  it("范围切片卡默认锚点为 0，标题带出锚点", () => {
+    renderCard(createRule("slice"));
+
+    expect(screen.getByText("Slice · Anchor 0")).not.toBeNull();
+    expect(screen.getByText("Anchor")).not.toBeNull();
+    expect(screen.getByText("Length")).not.toBeNull();
+    expect(screen.getByText(/0 is the start/)).not.toBeNull();
+  });
+
+  it("范围切片标题带出锚点与范围", () => {
+    renderCard({ ...createRule("slice"), anchor: "-1", length: "-2" });
+
+    expect(screen.getByText("Slice · Anchor -1 · Length -2")).not.toBeNull();
+  });
+
+  it("范围切片锚点输入整体回写", async () => {
+    const user = userEvent.setup();
+    const { onRuleChange } = renderCard(createRule("slice"));
+
+    const [anchorInput] = screen.getAllByRole("textbox");
+    if (!anchorInput) throw new Error("slice anchor input missing");
+    await user.type(anchorInput, "1");
+    expect(onRuleChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({ kind: "slice", anchor: "01" }),
+    );
+  });
+
+  it("范围切片非法参数显示错误徽章", () => {
+    renderCard({ ...createRule("slice"), anchor: "1", length: "x" });
+
+    expect(screen.getByTitle("Invalid slice, skipped")).not.toBeNull();
   });
 
   it("前后缀文本输入整体回写", async () => {
@@ -118,7 +194,7 @@ describe("规则参数卡", () => {
     expect(screen.queryByTitle("Invalid numbering, skipped")).toBeNull();
   });
 
-  it("头部从左到右：拖放手柄、启用、标题、删除", () => {
+  it("头部从左到右：拖放手柄、收起/展开、启用、删除", () => {
     renderCard(createRule("case"));
 
     // 拖放手柄最左、删除最右：比较同行按钮的文档顺序
@@ -127,7 +203,29 @@ describe("规则参数卡", () => {
     const names = [...header.querySelectorAll("button")].map((button) =>
       button.getAttribute("aria-label"),
     );
-    expect(names).toEqual(["Drag to reorder", "Toggle enabled", "Remove rule"]);
+    expect(names).toEqual(["Drag to reorder", "Collapse/Expand", "Toggle enabled", "Remove rule"]);
+  });
+
+  it("收起隐藏参数区，仅保留标题栏与控制按钮", async () => {
+    const user = userEvent.setup();
+    renderCard(createRule("affix"));
+
+    const toggle = screen.getByRole("button", { name: "Collapse/Expand" });
+    expect(screen.getAllByRole("textbox")).not.toHaveLength(0);
+    // 收起/展开两态无选中底色：中和 ghost 的 aria-expanded 样式
+    expect(toggle.getAttribute("class")).toContain("aria-expanded:bg-transparent");
+
+    await user.click(toggle);
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    expect(screen.queryAllByRole("textbox")).toHaveLength(0);
+    // 标题栏与控制按钮保留
+    expect(screen.getByRole("button", { name: "Drag to reorder" })).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Toggle enabled" })).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Remove rule" })).not.toBeNull();
+
+    await user.click(toggle);
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getAllByRole("textbox")).not.toHaveLength(0);
   });
 
   it("拖放手柄可拖，卡片悬停与放置透出规则 id", async () => {

@@ -137,7 +137,7 @@ describe("重命名 workspace", () => {
     await user.click(screen.getByRole("button", { name: "Add files" }));
     await screen.findAllByText("a.png");
 
-    await addRuleByLabel(user, "Add affix");
+    await addRuleByLabel(user, "Affix");
     // 后缀文本框是左栏唯一的文本输入
     const textInput = container.querySelector(
       'section[aria-label="Rules"] input',
@@ -154,6 +154,14 @@ describe("重命名 workspace", () => {
     expect(screen.queryByText("a_v2.png")).toBeNull();
   });
 
+  it("添加范围切片规则渲染参数卡", async () => {
+    const user = userEvent.setup();
+    render(RenamerWorkspace);
+
+    await addRuleByLabel(user, "Slice");
+    expect(screen.getByText("Slice · Anchor 0")).not.toBeNull();
+  });
+
   it("禁用规则后跳过预览", async () => {
     const user = userEvent.setup();
     const { container } = render(RenamerWorkspace);
@@ -161,7 +169,7 @@ describe("重命名 workspace", () => {
     await user.click(screen.getByRole("button", { name: "Add files" }));
     await screen.findAllByText("a.png");
 
-    await addRuleByLabel(user, "Add affix");
+    await addRuleByLabel(user, "Affix");
     const textInput = container.querySelector(
       'section[aria-label="Rules"] input',
     ) as HTMLInputElement | null;
@@ -178,14 +186,14 @@ describe("重命名 workspace", () => {
     const user = userEvent.setup();
     render(RenamerWorkspace);
 
-    await addRuleByLabel(user, "Add affix");
-    await addRuleByLabel(user, "Strip affix");
-    await addRuleByLabel(user, "Change case");
+    await addRuleByLabel(user, "Affix");
+    await addRuleByLabel(user, "Letter case");
+    await addRuleByLabel(user, "Normalize");
     // 左栏三张卡，顺序即添加顺序
     const region = screen.getByRole("region", { name: "Rules" });
     const cards = within(region).getAllByRole("listitem");
     expect(cards).toHaveLength(3);
-    expect(cards[0]?.textContent).toContain("Add affix");
+    expect(cards[0]?.textContent).toContain("Affix");
 
     // 拖末卡手柄，放到首卡上半区 → 末卡移到首位
     //（jsdom 无布局且合成事件带不上 clientY，只覆盖上半区路径；下半区靠真机验证）
@@ -198,8 +206,8 @@ describe("重命名 workspace", () => {
     await fireEvent.drop(firstCard);
 
     const ordered = within(screen.getByRole("region", { name: "Rules" })).getAllByRole("listitem");
-    expect(ordered[0]?.textContent).toContain("Change case");
-    expect(ordered[2]?.textContent).toContain("Strip affix");
+    expect(ordered[0]?.textContent).toContain("Normalize");
+    expect(ordered[2]?.textContent).toContain("Letter case");
   });
 
   it("执行改名并结算落盘：成功更新路径，跳过常驻行徽章", async () => {
@@ -209,7 +217,7 @@ describe("重命名 workspace", () => {
 
     await user.click(screen.getByRole("button", { name: "Add files" }));
     await screen.findAllByText("a.png");
-    await addRuleByLabel(user, "Add affix");
+    await addRuleByLabel(user, "Affix");
     const textInput = container.querySelector(
       'section[aria-label="Rules"] input',
     ) as HTMLInputElement | null;
@@ -244,7 +252,7 @@ describe("重命名 workspace", () => {
 
     await user.click(screen.getByRole("button", { name: "Add files" }));
     await screen.findAllByText("a.png");
-    await addRuleByLabel(user, "Add affix");
+    await addRuleByLabel(user, "Affix");
     const textInput = container.querySelector(
       'section[aria-label="Rules"] input',
     ) as HTMLInputElement | null;
@@ -285,5 +293,5 @@ async function addRuleByLabel(
   // Escape 尝试关闭，残留样式手动释放（纯 jsdom 产物，真机上选择即关闭）
   await user.keyboard("{Escape}");
   document.body.removeAttribute("style");
-  expect(screen.getByText(label)).not.toBeNull();
+  expect(screen.getByText(label, { exact: false })).not.toBeNull();
 }

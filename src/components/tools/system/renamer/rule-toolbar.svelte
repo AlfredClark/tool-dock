@@ -34,12 +34,12 @@
   /** 规则候选：类型 + 图标 + 文案，顺序即下拉展示顺序 */
   const kindOptions: { kind: RenamerRuleKind; icon: typeof PlusIcon; label: string }[] = [
     { kind: "affix", icon: PlusIcon, label: m.tool_renamer_rule_kind_affix() },
-    { kind: "strip", icon: ScissorsIcon, label: m.tool_renamer_rule_kind_strip() },
     { kind: "case", icon: TypeIcon, label: m.tool_renamer_rule_kind_case() },
+    { kind: "normalize", icon: SparklesIcon, label: m.tool_renamer_rule_kind_normalize() },
     { kind: "replace", icon: ReplaceIcon, label: m.tool_renamer_rule_kind_replace() },
     { kind: "regex", icon: RegexIcon, label: m.tool_renamer_rule_kind_regex() },
     { kind: "number", icon: HashIcon, label: m.tool_renamer_rule_kind_number() },
-    { kind: "normalize", icon: SparklesIcon, label: m.tool_renamer_rule_kind_normalize() },
+    { kind: "slice", icon: ScissorsIcon, label: m.tool_renamer_rule_kind_slice() },
   ];
 </script>
 

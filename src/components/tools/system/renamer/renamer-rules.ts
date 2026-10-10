@@ -1,16 +1,16 @@
 // 重命名规则纯函数：拆扩展/单条应用/按序应用/预览拼装/工厂/数组变换，供 workspace 调用与单测覆盖。
 // 无 Svelte 依赖，可在 node 单测直接导入；非法参数一律整条跳过（passthrough），预览永不抛错。
-import type { RenamerRule, RenamerRuleKind } from "./renamer-types";
+import type { RenamerNormalizePreset, RenamerRule, RenamerRuleKind } from "./renamer-types";
 
 /** 规则候选顺序：即添加下拉框的展示顺序 */
 export const RULE_KINDS: RenamerRuleKind[] = [
   "affix",
-  "strip",
   "case",
+  "normalize",
   "replace",
   "regex",
   "number",
-  "normalize",
+  "slice",
 ];
 
 /** 拆分主名与扩展：扩展取最后一个 `.` 后缀；点文件（如 `.gitignore`）视为无扩展 */
@@ -26,9 +26,20 @@ function parseCount(text: string): number | null {
   return Number.parseInt(text.trim(), 10);
 }
 
+/** 解析可负整数文本（切片锚点/范围用）：非法返回 `null`（调用方整条跳过） */
+function parseSliceInt(text: string): number | null {
+  if (!/^-?\d+$/.test(text.trim())) return null;
+  return Number.parseInt(text.trim(), 10);
+}
+
 /** 转义正则特殊字符（`replace` 大小写不敏感分支用） */
 function escapeRegExp(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** 渲染编号格式：`$n` 为编号占位，`$$` 转义为字面 `$`（无占位即静态文本） */
+function renderNumberFormat(format: string, padded: string): string {
+  return format.replace(/\$\$|\$n/g, (match) => (match === "$$" ? "$" : padded));
 }
 
 /** 应用 `title` 模式：按空白/下划线/连字符分词，每词首字母大写 */
@@ -42,28 +53,44 @@ function toTitleCase(stem: string): string {
     .join("");
 }
 
-/** 规范化：去首尾空白 → 连续空白转单下划线 → 移除系统非法字符 → 合并连续下划线 */
-function normalizeStem(stem: string): string {
-  return stem
-    .trim()
-    .replace(/\s+/g, "_")
-    .replace(/[/\\:*?"<>|\p{Cc}]/gu, "")
-    .replace(/_+/g, "_");
+/**
+ * 规范化：按预设做单一变换（`trim` 去首尾空白，`remove-spaces` 去全部空白，`remove-illegal`
+ * 删系统非法字符，`collapse-spaces` 连续空白收束为单空格，`spaces-to-underscore/hyphen` 空白段转单分隔符）
+ */
+function normalizeStem(stem: string, preset: RenamerNormalizePreset): string {
+  switch (preset) {
+    case "trim":
+      return stem.trim();
+    case "remove-spaces":
+      return stem.replace(/\s+/g, "");
+    case "remove-illegal":
+      return stem.replace(/[/\\:*?"<>|\p{Cc}]/gu, "");
+    case "collapse-spaces":
+      return stem.replace(/\s+/g, " ");
+    case "spaces-to-underscore":
+      return stem.replace(/\s+/g, "_");
+    case "spaces-to-hyphen":
+      return stem.replace(/\s+/g, "-");
+  }
 }
 
 /** 应用单条规则：返回新主名。 `index` 为文件在全量列表中的加入序号（自动编号基准，筛选/排序不改变编号）。 */
 export function applyRule(stem: string, rule: RenamerRule, index: number): string {
   switch (rule.kind) {
-    case "affix":
+    case "affix": {
+      if (rule.mode === "remove") {
+        if (rule.text === "") return stem;
+        if (rule.position === "prefix")
+          return stem.startsWith(rule.text) ? stem.slice(rule.text.length) : stem;
+        return stem.endsWith(rule.text) ? stem.slice(0, stem.length - rule.text.length) : stem;
+      }
       return rule.position === "prefix" ? `${rule.text}${stem}` : `${stem}${rule.text}`;
-    case "strip": {
-      const count = parseCount(rule.count);
-      if (count === null || count <= 0) return stem;
-      return rule.position === "prefix" ? stem.slice(count) : stem.slice(0, stem.length - count);
     }
     case "case": {
       if (rule.mode === "upper") return stem.toUpperCase();
       if (rule.mode === "lower") return stem.toLowerCase();
+      if (rule.mode === "sentence")
+        return stem.charAt(0).toUpperCase() + stem.slice(1).toLowerCase();
       return toTitleCase(stem);
     }
     case "replace": {
@@ -85,12 +112,23 @@ export function applyRule(stem: string, rule: RenamerRule, index: number): strin
       const digits = parseCount(rule.digits);
       if (start === null || step === null || digits === null) return stem;
       const padded = String(start + index * step).padStart(digits, "0");
+      const block = renderNumberFormat(rule.format, padded);
       return rule.position === "prefix"
-        ? `${padded}${rule.separator}${stem}`
-        : `${stem}${rule.separator}${padded}`;
+        ? `${block}${rule.separator}${stem}`
+        : `${stem}${rule.separator}${block}`;
     }
     case "normalize":
-      return normalizeStem(stem);
+      return normalizeStem(stem, rule.preset);
+    case "slice": {
+      if (rule.anchor === "" || rule.length === "") return stem;
+      const anchor = parseSliceInt(rule.anchor);
+      const length = parseSliceInt(rule.length);
+      if (anchor === null || length === null) return stem;
+      const size = stem.length;
+      const start = anchor >= 0 ? Math.min(anchor, size) : Math.max(size + anchor, 0);
+      if (length >= 0) return stem.slice(start, Math.min(start + length, size));
+      return stem.slice(Math.max(start + length + 1, 0), start + 1);
+    }
   }
 }
 
@@ -115,12 +153,7 @@ export function createRule<K extends RenamerRuleKind>(kind: K): Extract<RenamerR
   const id = crypto.randomUUID();
   switch (kind) {
     case "affix":
-      return { id, kind, enabled: true, position: "suffix", text: "" } as Extract<
-        RenamerRule,
-        { kind: K }
-      >;
-    case "strip":
-      return { id, kind, enabled: true, position: "prefix", count: "" } as Extract<
+      return { id, kind, enabled: true, mode: "add", position: "suffix", text: "" } as Extract<
         RenamerRule,
         { kind: K }
       >;
@@ -146,17 +179,27 @@ export function createRule<K extends RenamerRuleKind>(kind: K): Extract<RenamerR
         digits: "3",
         position: "prefix",
         separator: "_",
+        format: "$n",
       } as Extract<RenamerRule, { kind: K }>;
     case "normalize":
-      return { id, kind, enabled: true } as Extract<RenamerRule, { kind: K }>;
+      return { id, kind, enabled: true, preset: "trim" } as Extract<RenamerRule, { kind: K }>;
+    case "slice":
+      return { id, kind, enabled: true, anchor: "0", length: "" } as Extract<
+        RenamerRule,
+        { kind: K }
+      >;
   }
 }
 
 /** 校验规则参数：合法返回 `null`，非法返回错误原因（卡片红 Badge 展示，预览层照常跳过） */
-export function validateRule(rule: RenamerRule): "bad-count" | "bad-regex" | "bad-number" | null {
+export function validateRule(rule: RenamerRule): "bad-regex" | "bad-number" | "bad-slice" | null {
   switch (rule.kind) {
-    case "strip":
-      return parseCount(rule.count) === null ? "bad-count" : null;
+    case "slice": {
+      if (rule.anchor === "" || rule.length === "") return null;
+      return parseSliceInt(rule.anchor) === null || parseSliceInt(rule.length) === null
+        ? "bad-slice"
+        : null;
+    }
     case "regex": {
       if (rule.pattern === "") return null;
       try {

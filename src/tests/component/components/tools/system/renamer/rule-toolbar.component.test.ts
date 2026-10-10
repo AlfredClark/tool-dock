@@ -48,7 +48,7 @@ describe("规则工具栏", () => {
     expect(onClear).toHaveBeenCalledTimes(1);
   });
 
-  it("添加下拉框列出全部七种规则类型", async () => {
+  it("添加下拉框列出全部六种规则类型", async () => {
     const user = userEvent.setup();
     render(RuleToolbar, {
       props: { ruleCount: 0, onClear: vi.fn(), onAdd: vi.fn() },

@@ -353,7 +353,7 @@ CI（`.github/workflows/ci.yml`）在 `main` 分支上按变更路径触发：
 
 1. 严格按第 3、5 章的分层与边界写代码；
 2. 按改动类型补齐生成步骤（改 `messages/` → `i18n:compile`；改后端命令 → `cargo test` 重生成绑定；改后端逻辑即使不涉及签名也跑 `cargo test`）；
-3. 每完成一个小步即 `pnpm format` + `pnpm validate`，红灯立即停下修复。
+3. 每完成一个小步即 `pnpm format` + `pnpm validate` + （如果有前端修改则需要`pnpm audit`，后端修改则需要`pnpm audit:backend`），红灯立即停下修复。
 
 **任务收尾：**
 
