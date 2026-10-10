@@ -1,6 +1,11 @@
 // 重命名规则纯函数：拆扩展/单条应用/按序应用/预览拼装/工厂/数组变换，供 workspace 调用与单测覆盖。
 // 无 Svelte 依赖，可在 node 单测直接导入；非法参数一律整条跳过（passthrough），预览永不抛错。
-import type { RenamerNormalizePreset, RenamerRule, RenamerRuleKind } from "./renamer-types";
+import type {
+  RenamerCharsClass,
+  RenamerNormalizePreset,
+  RenamerRule,
+  RenamerRuleKind,
+} from "./renamer-types";
 
 /** 规则候选顺序：即添加下拉框的展示顺序 */
 export const RULE_KINDS: RenamerRuleKind[] = [
@@ -8,9 +13,10 @@ export const RULE_KINDS: RenamerRuleKind[] = [
   "case",
   "normalize",
   "replace",
-  "regex",
   "number",
   "slice",
+  "insert",
+  "chars",
 ];
 
 /** 拆分主名与扩展：扩展取最后一个 `.` 后缀；点文件（如 `.gitignore`）视为无扩展 */
@@ -26,10 +32,26 @@ function parseCount(text: string): number | null {
   return Number.parseInt(text.trim(), 10);
 }
 
-/** 解析可负整数文本（切片锚点/范围用）：非法返回 `null`（调用方整条跳过） */
+/** 解析可负整数文本（切片锚点/范围、插入位置用）：非法返回 `null`（调用方整条跳过） */
 function parseSliceInt(text: string): number | null {
   if (!/^-?\d+$/.test(text.trim())) return null;
   return Number.parseInt(text.trim(), 10);
+}
+
+/** 字符取舍的匹配源：类别映射为字符类，`custom` 转义后入 `[]`；空自定义返回 `null`（调用方整条跳过） */
+function charsClassSource(cls: RenamerCharsClass, custom: string): string | null {
+  switch (cls) {
+    case "digits":
+      return "\\p{Nd}";
+    case "letters":
+      return "\\p{Script=Latin}";
+    case "chinese":
+      return "\\p{Script=Han}";
+    case "spaces":
+      return "\\s";
+    case "custom":
+      return custom === "" ? null : `[${escapeRegExp(custom)}]`;
+  }
 }
 
 /** 转义正则特殊字符（`replace` 大小写不敏感分支用） */
@@ -95,16 +117,15 @@ export function applyRule(stem: string, rule: RenamerRule, index: number): strin
     }
     case "replace": {
       if (rule.find === "") return stem;
+      if (rule.mode === "regex") {
+        try {
+          return stem.replace(new RegExp(rule.find, rule.matchCase ? "g" : "gi"), rule.replacement);
+        } catch {
+          return stem;
+        }
+      }
       if (rule.matchCase) return stem.split(rule.find).join(rule.replacement);
       return stem.replace(new RegExp(escapeRegExp(rule.find), "gi"), rule.replacement);
-    }
-    case "regex": {
-      if (rule.pattern === "") return stem;
-      try {
-        return stem.replace(new RegExp(rule.pattern, "g"), rule.replacement);
-      } catch {
-        return stem;
-      }
     }
     case "number": {
       const start = parseCount(rule.start);
@@ -128,6 +149,20 @@ export function applyRule(stem: string, rule: RenamerRule, index: number): strin
       const start = anchor >= 0 ? Math.min(anchor, size) : Math.max(size + anchor, 0);
       if (length >= 0) return stem.slice(start, Math.min(start + length, size));
       return stem.slice(Math.max(start + length + 1, 0), start + 1);
+    }
+    case "insert": {
+      if (rule.text === "" || rule.position === "") return stem;
+      const position = parseSliceInt(rule.position);
+      if (position === null) return stem;
+      const size = stem.length;
+      const at = position >= 0 ? Math.min(position, size) : Math.max(size + position, 0);
+      return stem.slice(0, at) + rule.text + stem.slice(at);
+    }
+    case "chars": {
+      const source = charsClassSource(rule.class, rule.custom);
+      if (source === null) return stem;
+      if (rule.action === "delete") return stem.replace(new RegExp(source, "gu"), "");
+      return (stem.match(new RegExp(source, "gu")) ?? []).join("");
     }
   }
 }
@@ -160,15 +195,15 @@ export function createRule<K extends RenamerRuleKind>(kind: K): Extract<RenamerR
     case "case":
       return { id, kind, enabled: true, mode: "lower" } as Extract<RenamerRule, { kind: K }>;
     case "replace":
-      return { id, kind, enabled: true, find: "", replacement: "", matchCase: true } as Extract<
-        RenamerRule,
-        { kind: K }
-      >;
-    case "regex":
-      return { id, kind, enabled: true, pattern: "", replacement: "" } as Extract<
-        RenamerRule,
-        { kind: K }
-      >;
+      return {
+        id,
+        kind,
+        enabled: true,
+        mode: "plain",
+        find: "",
+        replacement: "",
+        matchCase: true,
+      } as Extract<RenamerRule, { kind: K }>;
     case "number":
       return {
         id,
@@ -188,11 +223,23 @@ export function createRule<K extends RenamerRuleKind>(kind: K): Extract<RenamerR
         RenamerRule,
         { kind: K }
       >;
+    case "insert":
+      return { id, kind, enabled: true, position: "0", text: "" } as Extract<
+        RenamerRule,
+        { kind: K }
+      >;
+    case "chars":
+      return { id, kind, enabled: true, action: "delete", class: "digits", custom: "" } as Extract<
+        RenamerRule,
+        { kind: K }
+      >;
   }
 }
 
 /** 校验规则参数：合法返回 `null`，非法返回错误原因（卡片红 Badge 展示，预览层照常跳过） */
-export function validateRule(rule: RenamerRule): "bad-regex" | "bad-number" | "bad-slice" | null {
+export function validateRule(
+  rule: RenamerRule,
+): "bad-regex" | "bad-number" | "bad-slice" | "bad-insert" | null {
   switch (rule.kind) {
     case "slice": {
       if (rule.anchor === "" || rule.length === "") return null;
@@ -200,10 +247,14 @@ export function validateRule(rule: RenamerRule): "bad-regex" | "bad-number" | "b
         ? "bad-slice"
         : null;
     }
-    case "regex": {
-      if (rule.pattern === "") return null;
+    case "insert": {
+      if (rule.text === "" || rule.position === "") return null;
+      return parseSliceInt(rule.position) === null ? "bad-insert" : null;
+    }
+    case "replace": {
+      if (rule.mode !== "regex" || rule.find === "") return null;
       try {
-        new RegExp(rule.pattern);
+        new RegExp(rule.find);
         return null;
       } catch {
         return "bad-regex";

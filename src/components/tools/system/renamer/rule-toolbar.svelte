@@ -1,12 +1,13 @@
 <script lang="ts">
   // 规则工具栏：左清空规则（无规则时隐藏）+ 右添加规则（下拉框选类型）。
   // 纯展示组件：规则数组由 workspace 持有，此处只做回调转发。
+  import EraserIcon from "@lucide/svelte/icons/eraser";
   import HashIcon from "@lucide/svelte/icons/hash";
   import PlusIcon from "@lucide/svelte/icons/plus";
-  import RegexIcon from "@lucide/svelte/icons/regex";
   import ReplaceIcon from "@lucide/svelte/icons/replace";
   import ScissorsIcon from "@lucide/svelte/icons/scissors";
   import SparklesIcon from "@lucide/svelte/icons/sparkles";
+  import TextCursorInputIcon from "@lucide/svelte/icons/text-cursor-input";
   import Trash2Icon from "@lucide/svelte/icons/trash-2";
   import TypeIcon from "@lucide/svelte/icons/type";
   import { Button } from "$components/shadcn-svelte/button";
@@ -37,9 +38,10 @@
     { kind: "case", icon: TypeIcon, label: m.tool_renamer_rule_kind_case() },
     { kind: "normalize", icon: SparklesIcon, label: m.tool_renamer_rule_kind_normalize() },
     { kind: "replace", icon: ReplaceIcon, label: m.tool_renamer_rule_kind_replace() },
-    { kind: "regex", icon: RegexIcon, label: m.tool_renamer_rule_kind_regex() },
     { kind: "number", icon: HashIcon, label: m.tool_renamer_rule_kind_number() },
     { kind: "slice", icon: ScissorsIcon, label: m.tool_renamer_rule_kind_slice() },
+    { kind: "insert", icon: TextCursorInputIcon, label: m.tool_renamer_rule_kind_insert() },
+    { kind: "chars", icon: EraserIcon, label: m.tool_renamer_rule_kind_chars() },
   ];
 </script>
 

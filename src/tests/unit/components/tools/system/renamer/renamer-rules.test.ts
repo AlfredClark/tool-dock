@@ -111,20 +111,39 @@ describe("applyRule", () => {
     ).toBe("pic");
   });
 
-  it("正则替换：分组引用与非法 pattern 跳过", () => {
+  it("正则替换：分组引用、大小写开关与非法表达式跳过", () => {
     expect(
       applyRule(
         "IMG_2024",
-        { ...createRule("regex"), pattern: "IMG_(\\d+)", replacement: "photo-$1" },
+        { ...createRule("replace"), mode: "regex", find: "IMG_(\\d+)", replacement: "photo-$1" },
         0,
       ),
     ).toBe("photo-2024");
     expect(
-      applyRule("pic", { ...createRule("regex"), pattern: "([a-z", replacement: "x" }, 0),
+      applyRule(
+        "pic",
+        { ...createRule("replace"), mode: "regex", find: "([a-z", replacement: "x" },
+        0,
+      ),
     ).toBe("pic");
-    expect(applyRule("pic", { ...createRule("regex"), pattern: "", replacement: "x" }, 0)).toBe(
-      "pic",
-    );
+    expect(
+      applyRule("pic", { ...createRule("replace"), mode: "regex", find: "", replacement: "x" }, 0),
+    ).toBe("pic");
+    // 正则模式也支持忽略大小写
+    expect(
+      applyRule(
+        "aAa",
+        { ...createRule("replace"), mode: "regex", find: "a", replacement: "b", matchCase: false },
+        0,
+      ),
+    ).toBe("bbb");
+    expect(
+      applyRule(
+        "aAa",
+        { ...createRule("replace"), mode: "regex", find: "a", replacement: "b", matchCase: true },
+        0,
+      ),
+    ).toBe("bAb");
   });
 
   it("自动编号：序号按 index 补零拼接，非法参数跳过", () => {
@@ -212,6 +231,68 @@ describe("applyRule", () => {
     );
   });
 
+  it("插入文本：指定位置插入，负数从尾计数，超界钳制", () => {
+    expect(applyRule("abcdefg", { ...createRule("insert"), position: "3", text: "X" }, 0)).toBe(
+      "abcXdefg",
+    );
+    // 开头与末尾即前后缀效果
+    expect(applyRule("abcdefg", { ...createRule("insert"), position: "0", text: "X" }, 0)).toBe(
+      "Xabcdefg",
+    );
+    expect(applyRule("abcdefg", { ...createRule("insert"), position: "7", text: "X" }, 0)).toBe(
+      "abcdefgX",
+    );
+    // 正向超界钳到末尾追加
+    expect(applyRule("abcdefg", { ...createRule("insert"), position: "99", text: "X" }, 0)).toBe(
+      "abcdefgX",
+    );
+    // -1 为末字符前
+    expect(applyRule("abcdefg", { ...createRule("insert"), position: "-1", text: "X" }, 0)).toBe(
+      "abcdefXg",
+    );
+    // 负向超界钳到开头
+    expect(applyRule("abcdefg", { ...createRule("insert"), position: "-99", text: "X" }, 0)).toBe(
+      "Xabcdefg",
+    );
+    // 空文本静默跳过
+    expect(applyRule("abcdefg", createRule("insert"), 0)).toBe("abcdefg");
+    // 非法位置整条跳过
+    expect(applyRule("abcdefg", { ...createRule("insert"), position: "x", text: "X" }, 0)).toBe(
+      "abcdefg",
+    );
+  });
+
+  it("字符取舍：按类别删除或仅保留，自定义走转义字符集", () => {
+    expect(
+      applyRule("a1中 ", { ...createRule("chars"), action: "delete", class: "digits" }, 0),
+    ).toBe("a中 ");
+    expect(applyRule("a1中 ", { ...createRule("chars"), action: "keep", class: "digits" }, 0)).toBe(
+      "1",
+    );
+    expect(
+      applyRule("a1中 ", { ...createRule("chars"), action: "delete", class: "letters" }, 0),
+    ).toBe("1中 ");
+    expect(
+      applyRule("a1中 ", { ...createRule("chars"), action: "keep", class: "chinese" }, 0),
+    ).toBe("中");
+    expect(
+      applyRule(
+        "foo bar",
+        { ...createRule("chars"), action: "delete", class: "custom", custom: "ao" },
+        0,
+      ),
+    ).toBe("f br");
+    expect(
+      applyRule(
+        "foo bar",
+        { ...createRule("chars"), action: "keep", class: "custom", custom: "ao" },
+        0,
+      ),
+    ).toBe("ooa");
+    // 空自定义字符集静默跳过
+    expect(applyRule("foo", createRule("chars"), 0)).toBe("foo");
+  });
+
   it("规范化六种预设各做一件事", () => {
     expect(applyRule("  pic  ", { ...createRule("normalize"), preset: "trim" }, 0)).toBe("pic");
     expect(applyRule("a b\tc", { ...createRule("normalize"), preset: "remove-spaces" }, 0)).toBe(
@@ -256,30 +337,35 @@ describe("previewName", () => {
 });
 
 describe("createRule", () => {
-  it("七种类型默认值完整", () => {
+  it("八种类型默认值完整", () => {
     for (const kind of RULE_KINDS) {
       const rule = createRule(kind);
       expect(rule.kind).toBe(kind);
       expect(rule.enabled).toBe(true);
       expect(rule.id.length).toBeGreaterThan(0);
     }
-    expect(RULE_KINDS).toHaveLength(7);
+    expect(RULE_KINDS).toHaveLength(8);
   });
 
   it("前后缀默认操作为添加", () => {
     expect(createRule("affix")).toMatchObject({ mode: "add" });
   });
 
-  it("候选顺序：规范化紧随大小写之后，范围切片居末", () => {
+  it("候选顺序：规范化紧随大小写之后，插入与字符取舍居末", () => {
     expect(RULE_KINDS).toEqual([
       "affix",
       "case",
       "normalize",
       "replace",
-      "regex",
       "number",
       "slice",
+      "insert",
+      "chars",
     ]);
+  });
+
+  it("查找替换默认方式为普通", () => {
+    expect(createRule("replace")).toMatchObject({ mode: "plain" });
   });
 
   it("范围切片默认锚点为 0 且范围留空（新建静默无操作）", () => {
@@ -297,11 +383,14 @@ describe("createRule", () => {
 
 describe("validateRule", () => {
   it("三类非法参数检出", () => {
-    expect(validateRule({ ...createRule("regex"), pattern: "([a-z" })).toBe("bad-regex");
+    expect(validateRule({ ...createRule("replace"), mode: "regex", find: "([a-z" })).toBe(
+      "bad-regex",
+    );
     expect(validateRule({ ...createRule("number"), start: "1", step: "x", digits: "3" })).toBe(
       "bad-number",
     );
     expect(validateRule({ ...createRule("slice"), anchor: "1", length: "x" })).toBe("bad-slice");
+    expect(validateRule({ ...createRule("insert"), position: "x", text: "X" })).toBe("bad-insert");
   });
 
   it("合法与无参规则返回空", () => {
@@ -309,6 +398,8 @@ describe("validateRule", () => {
     expect(validateRule(createRule("normalize"))).toBeNull();
     expect(validateRule(createRule("slice"))).toBeNull();
     expect(validateRule({ ...createRule("slice"), anchor: "-1", length: "-2" })).toBeNull();
+    expect(validateRule(createRule("insert"))).toBeNull();
+    expect(validateRule(createRule("chars"))).toBeNull();
   });
 });
 

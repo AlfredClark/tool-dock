@@ -28,11 +28,12 @@ if (typeof ResizeObserver === "undefined") {
 const KIND_LABELS: Record<RenamerRule["kind"], string> = {
   affix: "Affix · Add · Suffix",
   case: "Letter case · Lowercase",
-  replace: "Find & replace",
-  regex: "Regex replace",
+  replace: "Find & replace · Plain",
   number: "Auto number",
   normalize: "Normalize · Trim ends",
   slice: "Slice · Anchor 0",
+  insert: "Insert · Position 0",
+  chars: "Filter characters · Delete · Digits",
 };
 
 function renderCard(rule: RenamerRule, overrides: Record<string, unknown> = {}) {
@@ -150,6 +151,42 @@ describe("规则参数卡", () => {
     expect(screen.getByTitle("Invalid slice, skipped")).not.toBeNull();
   });
 
+  it("插入文本卡默认位置为 0，标题带出位置", () => {
+    renderCard(createRule("insert"));
+
+    expect(screen.getByText("Insert · Position 0")).not.toBeNull();
+    expect(screen.getByText("Position")).not.toBeNull();
+    expect(screen.getByText("Text")).not.toBeNull();
+    expect(screen.getByText(/-1 is before the last char/)).not.toBeNull();
+  });
+
+  it("插入文本标题带出位置与具体文本", () => {
+    renderCard({ ...createRule("insert"), position: "3", text: "_v2" });
+
+    expect(screen.getByText('Insert · Position 3 "_v2"')).not.toBeNull();
+  });
+
+  it("插入文本非法位置显示错误徽章", () => {
+    renderCard({ ...createRule("insert"), position: "x", text: "X" });
+
+    expect(screen.getByTitle("Invalid insert, skipped")).not.toBeNull();
+  });
+
+  it("字符取舍卡默认删除数字，标题带出操作与类别", () => {
+    renderCard(createRule("chars"));
+
+    expect(screen.getByText("Filter characters · Delete · Digits")).not.toBeNull();
+    expect(screen.getByText("Action")).not.toBeNull();
+    expect(screen.getByText("Category")).not.toBeNull();
+    expect(screen.getByText("Delete")).not.toBeNull();
+  });
+
+  it("字符取舍自定义标题带出字符集", () => {
+    renderCard({ ...createRule("chars"), action: "keep", class: "custom", custom: "ao" });
+
+    expect(screen.getByText('Filter characters · Keep only · Custom "ao"')).not.toBeNull();
+  });
+
   it("前后缀文本输入整体回写", async () => {
     const user = userEvent.setup();
     const { onRuleChange } = renderCard(createRule("affix"));
@@ -172,8 +209,18 @@ describe("规则参数卡", () => {
     );
   });
 
-  it("正则卡片提示进 placeholder，无独立提示行", () => {
-    renderCard(createRule("regex"));
+  it("查找替换卡默认方式为普通且区分大小写，标题带出方式", () => {
+    renderCard(createRule("replace"));
+
+    expect(screen.getByText("Find & replace · Plain")).not.toBeNull();
+    expect(screen.getByText("Method")).not.toBeNull();
+    expect(screen.getByText("Plain")).not.toBeNull();
+    expect(screen.getByText("Case")).not.toBeNull();
+    expect(screen.getByText("Match case")).not.toBeNull();
+  });
+
+  it("正则模式查找框提示进 placeholder，无独立提示行", () => {
+    renderCard({ ...createRule("replace"), mode: "regex" });
 
     expect(screen.getByPlaceholderText("e.g. IMG_(\\d+)")).not.toBeNull();
     expect(screen.getByPlaceholderText("e.g. photo-$1 ($1/$<name>/$&)")).not.toBeNull();
@@ -182,7 +229,7 @@ describe("规则参数卡", () => {
   });
 
   it("非法正则显示错误徽章", () => {
-    renderCard({ ...createRule("regex"), pattern: "([a-z" });
+    renderCard({ ...createRule("replace"), mode: "regex", find: "([a-z" });
 
     // 错误徽章仅图标 + title tooltip（头部空间紧，不占文本行）
     expect(screen.getByTitle("Invalid regex, skipped")).not.toBeNull();

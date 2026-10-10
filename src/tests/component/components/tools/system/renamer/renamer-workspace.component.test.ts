@@ -162,6 +162,17 @@ describe("重命名 workspace", () => {
     expect(screen.getByText("Slice · Anchor 0")).not.toBeNull();
   });
 
+  it("添加插入文本与字符取舍规则渲染参数卡", async () => {
+    const user = userEvent.setup();
+    render(RenamerWorkspace);
+
+    await addRuleByLabel(user, "Insert");
+    expect(screen.getByText("Insert · Position 0")).not.toBeNull();
+
+    await addRuleByLabel(user, "Filter characters");
+    expect(screen.getByText("Filter characters · Delete · Digits")).not.toBeNull();
+  });
+
   it("禁用规则后跳过预览", async () => {
     const user = userEvent.setup();
     const { container } = render(RenamerWorkspace);

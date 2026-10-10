@@ -28,9 +28,9 @@ export interface RenamerFileError {
   detail: string;
 }
 
-/** 规则类型：添加下拉框的七个候选项 */
+/** 规则类型：添加下拉框的八个候选项 */
 export type RenamerRuleKind =
-  "affix" | "case" | "replace" | "regex" | "number" | "normalize" | "slice";
+  "affix" | "case" | "normalize" | "replace" | "number" | "slice" | "insert" | "chars";
 
 /** 规则公共字段：稳定键 + 启用开关（禁用规则跳过不参与预览） */
 interface RenamerRuleBase {
@@ -55,8 +55,17 @@ export type RenamerNormalizePreset =
   | "spaces-to-underscore"
   | "spaces-to-hyphen";
 
+/** 查找替换匹配方式：普通文本或正则表达式（卡片内下拉切换，默认普通） */
+export type RenamerReplaceMode = "plain" | "regex";
+
 /** 大小写模式 */
 export type RenamerCaseMode = "upper" | "lower" | "sentence" | "title";
+
+/** 字符取舍操作：删除命中字符或仅保留命中字符（默认删除） */
+export type RenamerCharsAction = "delete" | "keep";
+
+/** 字符取舍类别（`custom` 走 `custom` 自由字符集） */
+export type RenamerCharsClass = "digits" | "letters" | "chinese" | "spaces" | "custom";
 
 /** 改名规则：判别联合体，`kind` 收窄后读写各自参数 */
 export type RenamerRule =
@@ -69,11 +78,11 @@ export type RenamerRule =
   | (RenamerRuleBase & { kind: "case"; mode: RenamerCaseMode })
   | (RenamerRuleBase & {
       kind: "replace";
+      mode: RenamerReplaceMode;
       find: string;
       replacement: string;
       matchCase: boolean;
     })
-  | (RenamerRuleBase & { kind: "regex"; pattern: string; replacement: string })
   | (RenamerRuleBase & {
       kind: "number";
       start: string;
@@ -84,4 +93,11 @@ export type RenamerRule =
       format: string;
     })
   | (RenamerRuleBase & { kind: "normalize"; preset: RenamerNormalizePreset })
-  | (RenamerRuleBase & { kind: "slice"; anchor: string; length: string });
+  | (RenamerRuleBase & { kind: "slice"; anchor: string; length: string })
+  | (RenamerRuleBase & { kind: "insert"; position: string; text: string })
+  | (RenamerRuleBase & {
+      kind: "chars";
+      action: RenamerCharsAction;
+      class: RenamerCharsClass;
+      custom: string;
+    });

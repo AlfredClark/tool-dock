@@ -71,10 +71,10 @@ describe("规则工具栏", () => {
 
     await user.click(screen.getByRole("button", { name: "Add rule" }));
     const target = [...document.querySelectorAll('[data-slot="dropdown-menu-item"]')].find((item) =>
-      item.textContent?.includes("Regex replace"),
+      item.textContent?.includes("Slice"),
     );
-    if (!target) throw new Error("regex menu item missing");
+    if (!target) throw new Error("slice menu item missing");
     await fireEvent.click(target);
-    expect(onAdd).toHaveBeenCalledWith("regex");
+    expect(onAdd).toHaveBeenCalledWith("slice");
   });
 });

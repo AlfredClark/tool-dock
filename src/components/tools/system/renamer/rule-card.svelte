@@ -18,7 +18,6 @@
     SelectTrigger,
     SelectValue,
   } from "$components/shadcn-svelte/select";
-  import { Switch } from "$components/shadcn-svelte/switch";
   import { m } from "$libs/i18n/paraglide/messages";
   import { cn } from "$libs/utils/shadcn-svelte";
   import RuleField from "./rule-field.svelte";
@@ -26,8 +25,11 @@
   import type {
     RenamerAffixMode,
     RenamerCaseMode,
+    RenamerCharsAction,
+    RenamerCharsClass,
     RenamerEdge,
     RenamerNormalizePreset,
+    RenamerReplaceMode,
     RenamerRule,
   } from "./renamer-types";
 
@@ -82,10 +84,10 @@
         return `${m.tool_renamer_rule_kind_case()} · ${caseModeLabel(rule.mode)}`;
       case "normalize":
         return `${m.tool_renamer_rule_kind_normalize()} · ${normalizePresetLabel(rule.preset)}`;
-      case "replace":
-        return m.tool_renamer_rule_kind_replace();
-      case "regex":
-        return m.tool_renamer_rule_kind_regex();
+      case "replace": {
+        const find = rule.find === "" ? "" : ` "${rule.find}"`;
+        return `${m.tool_renamer_rule_kind_replace()} · ${replaceModeLabel(rule.mode)}${find}`;
+      }
       case "number":
         return m.tool_renamer_rule_kind_number();
       case "slice": {
@@ -94,6 +96,20 @@
         const length =
           rule.length === "" ? "" : ` · ${m.tool_renamer_rule_slice_length()} ${rule.length}`;
         return `${m.tool_renamer_rule_kind_slice()}${anchor}${length}`;
+      }
+      case "insert": {
+        const position =
+          rule.position === "" ? "" : ` · ${m.tool_renamer_rule_position()} ${rule.position}`;
+        const text = rule.text === "" ? "" : ` "${rule.text}"`;
+        return `${m.tool_renamer_rule_kind_insert()}${position}${text}`;
+      }
+      case "chars": {
+        const actionLabel =
+          rule.action === "delete"
+            ? m.tool_renamer_rule_chars_action_delete()
+            : m.tool_renamer_rule_chars_action_keep();
+        const custom = rule.class !== "custom" || rule.custom === "" ? "" : ` "${rule.custom}"`;
+        return `${m.tool_renamer_rule_kind_chars()} · ${actionLabel} · ${charsClassLabel(rule.class)}${custom}`;
       }
     }
   }
@@ -107,6 +123,8 @@
         return m.tool_renamer_rule_number_invalid();
       case "bad-slice":
         return m.tool_renamer_rule_slice_invalid();
+      case "bad-insert":
+        return m.tool_renamer_rule_insert_invalid();
       case null:
         return null;
     }
@@ -157,6 +175,17 @@
     { value: "title", label: m.tool_renamer_rule_case_title() },
   ];
 
+  /** 查找替换方式候选 */
+  const replaceModeItems: { value: RenamerReplaceMode; label: string }[] = [
+    { value: "plain", label: m.tool_renamer_rule_replace_mode_plain() },
+    { value: "regex", label: m.tool_renamer_rule_replace_mode_regex() },
+  ];
+
+  /** 查找替换方式名文案（标题栏摘要用） */
+  function replaceModeLabel(mode: RenamerReplaceMode): string {
+    return replaceModeItems.find((item) => item.value === mode)?.label ?? mode;
+  }
+
   /** 大小写模式名文案（标题栏摘要用） */
   function caseModeLabel(mode: RenamerCaseMode): string {
     return caseItems.find((item) => item.value === mode)?.label ?? mode;
@@ -165,6 +194,26 @@
   /** 规范化预设名文案（标题栏摘要用） */
   function normalizePresetLabel(preset: RenamerNormalizePreset): string {
     return normalizePresetItems.find((item) => item.value === preset)?.label ?? preset;
+  }
+
+  /** 字符取舍操作候选 */
+  const charsActionItems: { value: RenamerCharsAction; label: string }[] = [
+    { value: "delete", label: m.tool_renamer_rule_chars_action_delete() },
+    { value: "keep", label: m.tool_renamer_rule_chars_action_keep() },
+  ];
+
+  /** 字符取舍类别候选 */
+  const charsClassItems: { value: RenamerCharsClass; label: string }[] = [
+    { value: "digits", label: m.tool_renamer_rule_chars_class_digits() },
+    { value: "letters", label: m.tool_renamer_rule_chars_class_letters() },
+    { value: "chinese", label: m.tool_renamer_rule_chars_class_chinese() },
+    { value: "spaces", label: m.tool_renamer_rule_chars_class_spaces() },
+    { value: "custom", label: m.tool_renamer_rule_chars_class_custom() },
+  ];
+
+  /** 字符取舍类别名文案（标题栏摘要用） */
+  function charsClassLabel(cls: RenamerCharsClass): string {
+    return charsClassItems.find((item) => item.value === cls)?.label ?? cls;
   }
 
   /** 下拉回写：候选外的值直接丢弃（bits-ui 给 string，先收窄） */
@@ -181,11 +230,48 @@
     if (rule.kind === "affix") onRuleChange({ ...rule, mode: next });
   }
 
+  /** 大小写敏感回写 */
+  function handleMatchCaseChange(next: string): void {
+    if (next !== "sensitive" && next !== "insensitive") return;
+    if (rule.kind === "replace") onRuleChange({ ...rule, matchCase: next === "sensitive" });
+  }
+
+  /** 字符取舍操作回写 */
+  function handleCharsActionChange(next: string): void {
+    if (next !== "delete" && next !== "keep") return;
+    if (rule.kind === "chars") onRuleChange({ ...rule, action: next });
+  }
+
+  /** 字符取舍类别回写 */
+  function handleCharsClassChange(next: string): void {
+    if (
+      next !== "digits" &&
+      next !== "letters" &&
+      next !== "chinese" &&
+      next !== "spaces" &&
+      next !== "custom"
+    )
+      return;
+    if (rule.kind === "chars") onRuleChange({ ...rule, class: next });
+  }
+
   /** 大小写回写 */
   function handleCaseChange(next: string): void {
     if (next !== "upper" && next !== "lower" && next !== "sentence" && next !== "title") return;
     if (rule.kind === "case") onRuleChange({ ...rule, mode: next });
   }
+
+  /** 查找替换方式回写 */
+  function handleReplaceModeChange(next: string): void {
+    if (next !== "plain" && next !== "regex") return;
+    if (rule.kind === "replace") onRuleChange({ ...rule, mode: next });
+  }
+
+  /** 大小写敏感候选（`matchCase` 布尔值的下拉映射） */
+  const matchCaseItems: { value: "sensitive" | "insensitive"; label: string }[] = [
+    { value: "sensitive", label: m.tool_renamer_rule_match_case() },
+    { value: "insensitive", label: m.tool_renamer_rule_ignore_case() },
+  ];
 
   /** 规范化预设回写 */
   function handleNormalizePresetChange(next: string): void {
@@ -337,10 +423,53 @@
           </div>
         {:else if rule.kind === "replace"}
           <div class={cn("grid grid-cols-2 gap-x-2 gap-y-0.5")}>
-            <RuleField label={m.tool_renamer_rule_find()} span>
+            <RuleField label={m.tool_renamer_rule_replace_mode()}>
+              <Select
+                type="single"
+                value={rule.mode}
+                items={replaceModeItems}
+                onValueChange={handleReplaceModeChange}
+              >
+                <SelectTrigger class={cn("h-7 w-full")}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {#each replaceModeItems as item (item.value)}
+                    <SelectItem value={item.value}>{item.label}</SelectItem>
+                  {/each}
+                </SelectContent>
+              </Select>
+            </RuleField>
+            <RuleField label={m.tool_renamer_rule_case_sensitivity()}>
+              <Select
+                type="single"
+                value={rule.matchCase ? "sensitive" : "insensitive"}
+                items={matchCaseItems}
+                onValueChange={handleMatchCaseChange}
+              >
+                <SelectTrigger class={cn("h-7 w-full")}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {#each matchCaseItems as item (item.value)}
+                    <SelectItem value={item.value}>{item.label}</SelectItem>
+                  {/each}
+                </SelectContent>
+              </Select>
+            </RuleField>
+            <RuleField
+              label={rule.mode === "regex"
+                ? m.tool_renamer_rule_pattern()
+                : m.tool_renamer_rule_find()}
+              span
+            >
               <Input
                 class={cn("h-7")}
                 value={rule.find}
+                spellcheck={rule.mode !== "regex"}
+                placeholder={rule.mode === "regex"
+                  ? m.tool_renamer_pattern_placeholder()
+                  : undefined}
                 oninput={(event) => onRuleChange({ ...rule, find: event.currentTarget.value })}
               />
             </RuleField>
@@ -348,37 +477,10 @@
               <Input
                 class={cn("h-7")}
                 value={rule.replacement}
-                oninput={(event) =>
-                  onRuleChange({ ...rule, replacement: event.currentTarget.value })}
-              />
-            </RuleField>
-            <div class={cn("flex items-center gap-1.5")}>
-              <Switch
-                checked={rule.matchCase}
-                onCheckedChange={(checked) => onRuleChange({ ...rule, matchCase: checked })}
-              />
-              <span class={cn("text-xs text-muted-foreground")}
-                >{m.tool_renamer_rule_match_case()}</span
-              >
-            </div>
-          </div>
-        {:else if rule.kind === "regex"}
-          <div class={cn("grid grid-cols-2 gap-x-2 gap-y-0.5")}>
-            <RuleField label={m.tool_renamer_rule_pattern()} span>
-              <Input
-                class={cn("h-7")}
-                value={rule.pattern}
-                spellcheck={false}
-                placeholder={m.tool_renamer_pattern_placeholder()}
-                oninput={(event) => onRuleChange({ ...rule, pattern: event.currentTarget.value })}
-              />
-            </RuleField>
-            <RuleField label={m.tool_renamer_rule_replacement()} span>
-              <Input
-                class={cn("h-7")}
-                value={rule.replacement}
-                spellcheck={false}
-                placeholder={m.tool_renamer_replacement_placeholder()}
+                spellcheck={rule.mode !== "regex"}
+                placeholder={rule.mode === "regex"
+                  ? m.tool_renamer_replacement_placeholder()
+                  : undefined}
                 oninput={(event) =>
                   onRuleChange({ ...rule, replacement: event.currentTarget.value })}
               />
@@ -484,6 +586,72 @@
             </RuleField>
           </div>
           <p class={cn("text-xs text-muted-foreground")}>{m.tool_renamer_rule_slice_hint()}</p>
+        {:else if rule.kind === "insert"}
+          <div class={cn("grid grid-cols-2 gap-x-2 gap-y-0.5")}>
+            <RuleField label={m.tool_renamer_rule_position()}>
+              <Input
+                class={cn("h-7")}
+                value={rule.position}
+                inputmode="numeric"
+                oninput={(event) => onRuleChange({ ...rule, position: event.currentTarget.value })}
+              />
+            </RuleField>
+            <RuleField label={m.tool_renamer_rule_text()}>
+              <Input
+                class={cn("h-7")}
+                value={rule.text}
+                oninput={(event) => onRuleChange({ ...rule, text: event.currentTarget.value })}
+              />
+            </RuleField>
+          </div>
+          <p class={cn("text-xs text-muted-foreground")}>{m.tool_renamer_rule_insert_hint()}</p>
+        {:else if rule.kind === "chars"}
+          <div class={cn("grid grid-cols-2 gap-x-2 gap-y-0.5")}>
+            <RuleField label={m.tool_renamer_rule_chars_action()}>
+              <Select
+                type="single"
+                value={rule.action}
+                items={charsActionItems}
+                onValueChange={handleCharsActionChange}
+              >
+                <SelectTrigger class={cn("h-7 w-full")}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {#each charsActionItems as item (item.value)}
+                    <SelectItem value={item.value}>{item.label}</SelectItem>
+                  {/each}
+                </SelectContent>
+              </Select>
+            </RuleField>
+            <RuleField label={m.tool_renamer_rule_chars_class()}>
+              <Select
+                type="single"
+                value={rule.class}
+                items={charsClassItems}
+                onValueChange={handleCharsClassChange}
+              >
+                <SelectTrigger class={cn("h-7 w-full")}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {#each charsClassItems as item (item.value)}
+                    <SelectItem value={item.value}>{item.label}</SelectItem>
+                  {/each}
+                </SelectContent>
+              </Select>
+            </RuleField>
+            <RuleField label={m.tool_renamer_rule_chars_custom()} span>
+              <Input
+                class={cn("h-7")}
+                value={rule.custom}
+                disabled={rule.class !== "custom"}
+                spellcheck={false}
+                placeholder={m.tool_renamer_rule_chars_custom_placeholder()}
+                oninput={(event) => onRuleChange({ ...rule, custom: event.currentTarget.value })}
+              />
+            </RuleField>
+          </div>
         {/if}
       {/if}
     </CardContent>
